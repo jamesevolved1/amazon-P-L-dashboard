@@ -33,6 +33,7 @@ export interface ProductSku {
   sourceFields?: Partial<Record<"sales" | "units" | "adSpend" | "fees" | "storage" | "cogs", string>>;
   feeAudit?: Partial<FeeMatchAudit>;
   importIssues?: string[];
+  importedAt?: string;
 }
 
 export interface SkuScenarioOverride {

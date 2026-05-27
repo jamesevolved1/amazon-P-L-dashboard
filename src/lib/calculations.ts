@@ -295,6 +295,45 @@ function buildQualityIssues(skus: ProductSku[], rows: CalculatedSkuPnl[]) {
   const issues: DataQualityIssue[] = [];
   const seenAsins = new Set<string>();
   const grouped = new Map<string, CalculatedSkuPnl[]>();
+  const importedAtDates = skus
+    .map((sku) => (sku.importedAt ? new Date(sku.importedAt) : null))
+    .filter((date): date is Date => Boolean(date && !Number.isNaN(date.getTime())));
+  const oldestImport = importedAtDates.length ? new Date(Math.min(...importedAtDates.map((date) => date.getTime()))) : null;
+  const newestImport = importedAtDates.length ? new Date(Math.max(...importedAtDates.map((date) => date.getTime()))) : null;
+
+  if (oldestImport) {
+    const ageDays = Math.floor((Date.now() - oldestImport.getTime()) / 86_400_000);
+    if (ageDays > 45) {
+      issues.push({
+        severity: "medium",
+        title: "Report data may be stale",
+        detail: `Oldest imported data is ${ageDays} days old. Re-upload source reports before making spend or pricing decisions.`,
+      });
+    } else if (ageDays > 30) {
+      issues.push({
+        severity: "low",
+        title: "Report freshness reminder",
+        detail: `Oldest imported data is ${ageDays} days old. Consider refreshing reports soon.`,
+      });
+    }
+  } else if (skus.length) {
+    issues.push({
+      severity: "low",
+      title: "Report freshness unknown",
+      detail: "This workspace was created before upload timestamps were tracked. Re-upload reports to enable freshness checks.",
+    });
+  }
+
+  if (oldestImport && newestImport) {
+    const spreadDays = Math.floor((newestImport.getTime() - oldestImport.getTime()) / 86_400_000);
+    if (spreadDays > 14) {
+      issues.push({
+        severity: "medium",
+        title: "Mixed report freshness",
+        detail: `Uploaded source data spans ${spreadDays} days. Rebuild from reports from the same reporting period when possible.`,
+      });
+    }
+  }
 
   skus.forEach((sku) => {
     if (sku.asin && seenAsins.has(sku.asin)) {

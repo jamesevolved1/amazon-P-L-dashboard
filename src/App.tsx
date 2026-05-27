@@ -14,7 +14,7 @@ import { SkuProfitTable } from "./components/SkuProfitTable";
 import { TacosSnapshot } from "./components/TacosSnapshot";
 import { aggregateParentAsinPnl, calculatePortfolio } from "./lib/calculations";
 import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
-import { downloadCsv, exportWorkbook } from "./lib/export";
+import { downloadCsv, exportExecutiveSummary, exportWorkbook } from "./lib/export";
 import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
 import { loadActiveClientId, loadClients, loadClientSkuData, loadSavedScenarios, saveActiveClientId, saveClients, saveClientSkuData, saveScenarios } from "./lib/storage";
@@ -275,6 +275,13 @@ export default function App({ session }: { session: SupabaseSession | null }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => exportExecutiveSummary(portfolio.rows, parentRows, summary, portfolio.issues)}
+              className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-warm"
+            >
+              <Download className="h-4 w-4" />
+              Summary
+            </button>
+            <button
               onClick={() => downloadCsv(portfolio.rows)}
               className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-warm"
             >
@@ -296,17 +303,19 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         {activeSection === "upload" ? (
           <FileImport
             onLoaded={(loadedSkus, importWarnings) => {
+              const importedAt = new Date().toISOString();
+              const stampedSkus = loadedSkus.map((sku) => ({ ...sku, importedAt }));
               setWarnings(importWarnings);
               setSelected(null);
-              if (!loadedSkus.length) return;
-              const nextSkuData = { ...clientSkuData, [activeClientId]: loadedSkus };
+              if (!stampedSkus.length) return;
+              const nextSkuData = { ...clientSkuData, [activeClientId]: stampedSkus };
               const nextWorkspaceWarnings = { ...workspaceWarnings, [activeClientId]: importWarnings };
               setClientSkuData(nextSkuData);
               setWorkspaceWarnings(nextWorkspaceWarnings);
               saveClientSkuData(nextSkuData);
               if (userId && activeClientId) {
                 setCloudStatus("Saving workspace...");
-                saveCloudWorkspace(userId, activeClientId, loadedSkus, importWarnings)
+                saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings)
                   .then(() => setCloudStatus("Cloud saved"))
                   .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
               }

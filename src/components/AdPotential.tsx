@@ -1,74 +1,75 @@
-import { UploadCloud } from "lucide-react";
+import { Plus, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { currency, number, percent } from "../lib/format";
 import type { AdPotentialInputs, AdPotentialPlanRow } from "../types/models";
 
-type PotentialScenarioInput = {
-  clicks: number;
-  impressions: number;
+type PlanInput = {
+  name: string;
+  plannedBudget: number;
+  targetRoas: number;
+  cpc: number;
+  conversionRate: number;
+  averageOrderValue: number;
+  organicLiftMultiplier: number;
 };
 
 const defaultInputs: AdPotentialInputs = {
   name: "Base Ad Potential",
-  currentImpressions: 100,
-  currentSpend: 100,
-  currentPaidSales: 100000,
-  currentOrganicSales: 200000,
-  currentClicks: 100,
-  currentOrders: 100,
+  currentImpressions: 100000,
+  currentSpend: 4514,
+  currentPaidSales: 12100,
+  currentOrganicSales: 0,
+  currentClicks: 4500,
+  currentOrders: 550,
   cpc: 1,
-  targetRoas: 1.43,
-  organicLiftMultiplier: 2,
-  averageOrderValue: 1,
-  conversionRate: 1,
+  targetRoas: 2.5,
+  organicLiftMultiplier: 0.35,
+  averageOrderValue: 22,
+  conversionRate: 0.12,
   planningMode: "budget",
-  plannedClicks: 23000,
-  plannedBudget: 23000,
+  plannedClicks: 6000,
+  plannedBudget: 6000,
 };
 
-const defaultScenarioInputs: PotentialScenarioInput[] = [
-  { clicks: 2500, impressions: 100000 },
-  { clicks: 25000, impressions: 25000 },
-  { clicks: 35000, impressions: 35000 },
+const defaultPlans: PlanInput[] = [
+  { name: "Conservative", plannedBudget: 4000, targetRoas: 2.5, cpc: 1, conversionRate: 0.1, averageOrderValue: 22, organicLiftMultiplier: 0.2 },
+  { name: "Base Push", plannedBudget: 7000, targetRoas: 2.2, cpc: 1.05, conversionRate: 0.11, averageOrderValue: 22, organicLiftMultiplier: 0.35 },
+  { name: "Aggressive", plannedBudget: 10000, targetRoas: 1.9, cpc: 1.15, conversionRate: 0.1, averageOrderValue: 22, organicLiftMultiplier: 0.5 },
 ];
 
 export function AdPotential() {
   const [inputs, setInputs] = useState<AdPotentialInputs>(defaultInputs);
-  const [scenarioInputs, setScenarioInputs] = useState<PotentialScenarioInput[]>(defaultScenarioInputs);
+  const [plans, setPlans] = useState<PlanInput[]>(defaultPlans);
   const [imported, setImported] = useState(false);
 
-  const currentPaidRoas = inputs.currentSpend ? inputs.currentPaidSales / inputs.currentSpend : 0;
-  const currentTotalSales = inputs.currentPaidSales + inputs.currentOrganicSales;
-  const currentTotalRoas = inputs.currentSpend ? currentTotalSales / inputs.currentSpend : 0;
-  const currentTacos = currentTotalSales ? inputs.currentSpend / currentTotalSales : 0;
-  const currentAcos = inputs.currentPaidSales ? inputs.currentSpend / inputs.currentPaidSales : 0;
-  const paidShare = currentTotalSales ? inputs.currentPaidSales / currentTotalSales : 0;
-  const organicShare = currentTotalSales ? inputs.currentOrganicSales / currentTotalSales : 0;
-  const impressionsPerClick = inputs.currentClicks ? inputs.currentImpressions / inputs.currentClicks : 0;
-  const costPerImpression = inputs.currentImpressions ? inputs.currentSpend / inputs.currentImpressions : 0;
-  const ordersPerImpression = inputs.currentImpressions ? inputs.currentOrders / inputs.currentImpressions : 0;
+  const baselineTotalSales = inputs.currentPaidSales + inputs.currentOrganicSales;
+  const baselineRoas = inputs.currentSpend ? inputs.currentPaidSales / inputs.currentSpend : 0;
+  const baselineTotalRoas = inputs.currentSpend ? baselineTotalSales / inputs.currentSpend : 0;
+  const baselineTacos = baselineTotalSales ? inputs.currentSpend / baselineTotalSales : 0;
+  const baselineCpc = inputs.currentClicks ? inputs.currentSpend / inputs.currentClicks : inputs.cpc;
+  const baselineConversion = inputs.currentClicks ? inputs.currentOrders / inputs.currentClicks : inputs.conversionRate;
+  const baselineAov = inputs.currentOrders ? inputs.currentPaidSales / inputs.currentOrders : inputs.averageOrderValue;
+  const rows = useMemo(() => plans.map((plan) => buildPlanRow(inputs, plan)), [inputs, plans]);
+  const bestProfitSignal = rows.reduce((best, row) => (row.totalSales - row.budget > best.totalSales - best.budget ? row : best), rows[0] ?? buildPlanRow(inputs, defaultPlans[0]));
 
-  const rows = useMemo(() => buildScenarioRows(inputs, scenarioInputs), [inputs, scenarioInputs]);
-  const plan = rows[0] ?? buildScenarioRow(inputs, defaultScenarioInputs[0]);
-
-  const update = <K extends keyof AdPotentialInputs>(key: K, value: AdPotentialInputs[K]) => {
-    setInputs((current) => ({ ...current, [key]: value }));
-  };
+  const update = <K extends keyof AdPotentialInputs>(key: K, value: AdPotentialInputs[K]) => setInputs((current) => ({ ...current, [key]: value }));
+  const updatePlan = (index: number, patch: Partial<PlanInput>) => setPlans((current) => current.map((plan, itemIndex) => (itemIndex === index ? { ...plan, ...patch } : plan)));
 
   return (
     <section className="grid gap-5">
       <div className="rounded-lg border border-line bg-white p-5 shadow-card">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h2 className="text-xl font-extrabold text-ink">Ad Potential Planner</h2>
+            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">ROAS Growth Model</div>
+            <h2 className="mt-2 text-2xl font-extrabold text-ink">Ad Potential Planner</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-steel">
-              Model how much incremental sales you could create from ad spend using ROAS, CPC, conversion rate, and organic lift.
+              Plan spend with ROAS, CPC, conversion rate, AOV, and organic lift. The model shows paid sales, total sales, TACOS, and incremental lift.
             </p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-deep">
             <UploadCloud className="h-4 w-4" />
-            Upload AD Potential
+            Upload Model
             <input
               type="file"
               accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -78,7 +79,7 @@ export function AdPotential() {
                 if (!file) return;
                 const parsed = await parseAdPotentialFile(file);
                 setInputs(parsed.inputs);
-                setScenarioInputs(parsed.scenarioInputs);
+                setPlans(parsed.plans);
                 setImported(true);
               }}
             />
@@ -86,103 +87,55 @@ export function AdPotential() {
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <Metric label="Current Paid ROAS" value={`${currentPaidRoas.toFixed(2)}x`} helper={`${currency(inputs.currentPaidSales)} paid sales`} />
-          <Metric label="Current Total ROAS" value={`${currentTotalRoas.toFixed(2)}x`} helper={`${currency(currentTotalSales)} total sales`} />
-          <Metric label="Current ACOS / TACOS" value={`${percent(currentAcos)} / ${percent(currentTacos)}`} helper={`${currency(inputs.currentSpend)} spend`} />
-          <Metric label="Target ROAS" value={`${inputs.targetRoas.toFixed(2)}x`} helper={`Equivalent ACOS ${percent(inputs.targetRoas ? 1 / inputs.targetRoas : 0)}`} tone="good" />
-          <Metric label="Scenario Total Sales" value={currency(plan.totalSales)} helper={`${percent(plan.tacos)} TACOS`} tone="good" />
+          <Metric label="Current Paid ROAS" value={`${baselineRoas.toFixed(2)}x`} helper={`${currency(inputs.currentPaidSales)} paid sales`} />
+          <Metric label="Current Total ROAS" value={`${baselineTotalRoas.toFixed(2)}x`} helper={`${currency(baselineTotalSales)} total sales`} />
+          <Metric label="Current TACOS" value={percent(baselineTacos)} helper={`${currency(inputs.currentSpend)} spend`} />
+          <Metric label="Best Plan Total Sales" value={currency(bestProfitSignal.totalSales)} helper={`${bestProfitSignal.totalRoas.toFixed(2)}x total ROAS`} tone="good" />
+          <Metric label="Best Plan TACOS" value={percent(bestProfitSignal.tacos)} helper={`${currency(bestProfitSignal.budget)} budget`} tone={bestProfitSignal.tacos <= baselineTacos ? "good" : "neutral"} />
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <div className="rounded-lg border border-line bg-white p-5 shadow-card">
-          <h3 className="text-lg font-extrabold text-ink">ROAS Variables</h3>
-          <p className="mt-1 text-sm leading-5 text-steel">Change the assumptions that control the potential model.</p>
-
-          <div className="mt-5 grid gap-4">
-            <label className="block">
-              <span className="text-sm font-bold text-ink">Scenario name</span>
-              <input className="mt-2 w-full rounded-md border border-line px-3 py-2.5 text-sm font-medium outline-none focus:border-brand" value={inputs.name} onChange={(event) => update("name", event.target.value)} />
-            </label>
-
-            <div className="rounded-lg border border-amber-200 bg-[#FFF7E5] px-3 py-2 text-xs font-semibold leading-5 text-steel">
-              Budget is driven by impressions x cost per impression. Editing CPC updates spend; editing row clicks updates impressions, so the outputs move immediately.
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <NumberInput
-                label="Impressions"
-                value={inputs.currentImpressions}
-                step="100"
-                onChange={(value) => setInputs((current) => ({ ...current, currentImpressions: value }))}
-              />
-              <NumberInput
-                label="Clicks"
-                value={inputs.currentClicks}
-                step="100"
-                onChange={(value) => setInputs((current) => ({
-                  ...current,
-                  currentClicks: value,
-                  cpc: value ? current.currentSpend / value : current.cpc,
-                }))}
-              />
-              <NumberInput
-                label="Spend"
-                value={inputs.currentSpend}
-                step="100"
-                onChange={(value) => setInputs((current) => ({
-                  ...current,
-                  currentSpend: value,
-                  cpc: current.currentClicks ? value / current.currentClicks : current.cpc,
-                }))}
-              />
-              <NumberInput
-                label="CPC"
-                value={inputs.cpc}
-                step="0.05"
-                onChange={(value) => setInputs((current) => ({
-                  ...current,
-                  cpc: value,
-                  currentSpend: value * current.currentClicks,
-                }))}
-              />
-              <NumberInput label="Orders" value={inputs.currentOrders} step="10" onChange={(value) => update("currentOrders", value)} />
+      <div className="grid gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
+        <div className="grid gap-5">
+          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
+            <h3 className="text-lg font-extrabold text-ink">Current Baseline</h3>
+            <p className="mt-1 text-sm leading-5 text-steel">Use current account or portfolio performance as the starting point.</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <NumberInput label="Current spend" value={inputs.currentSpend} step="100" onChange={(value) => update("currentSpend", value)} />
               <NumberInput label="Paid sales" value={inputs.currentPaidSales} step="1000" onChange={(value) => update("currentPaidSales", value)} />
-              <NumberInput label="Total sales" value={inputs.currentPaidSales + inputs.currentOrganicSales} step="1000" onChange={(value) => update("currentOrganicSales", Math.max(0, value - inputs.currentPaidSales))} />
-              <NumberInput label="Target ROAS" value={inputs.targetRoas} step="0.05" onChange={(value) => update("targetRoas", value)} />
+              <NumberInput label="Organic sales" value={inputs.currentOrganicSales} step="1000" onChange={(value) => update("currentOrganicSales", value)} />
+              <NumberInput label="Clicks" value={inputs.currentClicks} step="100" onChange={(value) => update("currentClicks", value)} />
+              <NumberInput label="Orders" value={inputs.currentOrders} step="10" onChange={(value) => update("currentOrders", value)} />
+              <NumberInput label="Impressions" value={inputs.currentImpressions} step="1000" onChange={(value) => update("currentImpressions", value)} />
             </div>
+          </div>
 
-            <div className="grid grid-cols-3 gap-2 rounded-lg border border-line bg-warm/60 p-3">
-              <MiniFormula label="Impr. / click" value={number(impressionsPerClick)} />
-              <MiniFormula label="Cost / impr." value={currency(costPerImpression)} />
-              <MiniFormula label="Orders / impr." value={String(Math.round(ordersPerImpression * 10000) / 10000)} />
-              <MiniFormula label="Paid share" value={percent(paidShare)} />
-              <MiniFormula label="Organic share" value={percent(organicShare)} />
-              <MiniFormula label="Target ACOS" value={percent(inputs.targetRoas ? 1 / inputs.targetRoas : 0)} />
-            </div>
-
-            <div className="rounded-lg border border-line bg-white p-3">
-              <div className="text-sm font-extrabold text-ink">Potential rows</div>
-              <div className="mt-1 text-xs leading-5 text-steel">Edit clicks and/or impressions needed. Blank impressions will calculate from clicks x impressions per click.</div>
-              <div className="mt-3 grid gap-2">
-                {scenarioInputs.map((row, index) => (
-                  <div key={index} className="grid grid-cols-[auto_1fr_1fr] items-end gap-2">
-                    <div className="pb-2 text-xs font-extrabold text-steel">#{index + 1}</div>
-                    <NumberInput
-                      label="Clicks"
-                      value={row.clicks}
-                      step="100"
-                      onChange={(value) => setScenarioInputs((current) => current.map((item, itemIndex) => itemIndex === index ? { clicks: value, impressions: value * impressionsPerClick } : item))}
-                    />
-                    <NumberInput
-                      label="Impressions"
-                      value={row.impressions}
-                      step="100"
-                      onChange={(value) => setScenarioInputs((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, impressions: value } : item))}
-                    />
-                  </div>
-                ))}
+          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-extrabold text-ink">Default Assumptions</h3>
+                <p className="mt-1 text-sm leading-5 text-steel">These seed new plan rows. Each row can still be changed individually.</p>
               </div>
+              <button
+                type="button"
+                className="rounded-full bg-brand p-2 text-white hover:bg-deep"
+                onClick={() => setPlans((current) => [...current, { name: `Plan ${current.length + 1}`, plannedBudget: inputs.plannedBudget || inputs.currentSpend, targetRoas: inputs.targetRoas, cpc: inputs.cpc || baselineCpc, conversionRate: inputs.conversionRate || baselineConversion, averageOrderValue: inputs.averageOrderValue || baselineAov, organicLiftMultiplier: inputs.organicLiftMultiplier }])}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <NumberInput label="Target ROAS" value={inputs.targetRoas} step="0.1" onChange={(value) => update("targetRoas", value)} />
+              <NumberInput label="CPC" value={inputs.cpc} step="0.05" onChange={(value) => update("cpc", value)} />
+              <NumberInput label="Conversion %" value={inputs.conversionRate * 100} step="0.5" onChange={(value) => update("conversionRate", value / 100)} />
+              <NumberInput label="Average order value" value={inputs.averageOrderValue} step="1" onChange={(value) => update("averageOrderValue", value)} />
+              <NumberInput label="Organic lift %" value={inputs.organicLiftMultiplier * 100} step="5" onChange={(value) => update("organicLiftMultiplier", value / 100)} />
+              <NumberInput label="Planned budget" value={inputs.plannedBudget} step="500" onChange={(value) => update("plannedBudget", value)} />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg border border-line bg-warm/60 p-3">
+              <MiniFormula label="Baseline CPC" value={currency(baselineCpc)} />
+              <MiniFormula label="Baseline CVR" value={percent(baselineConversion)} />
+              <MiniFormula label="Baseline AOV" value={currency(baselineAov)} />
             </div>
           </div>
         </div>
@@ -190,37 +143,57 @@ export function AdPotential() {
         <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
           <div className="flex flex-col gap-3 border-b border-line p-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h3 className="text-lg font-extrabold text-ink">ROAS Potential Table</h3>
-              <p className="mt-1 text-sm text-steel">ROAS replaces ACOS here: higher ROAS means more sales per ad dollar.</p>
+              <h3 className="text-lg font-extrabold text-ink">Potential Plans</h3>
+              <p className="mt-1 text-sm text-steel">Edit any row. Higher ROAS and organic lift improve efficiency; higher CPC or lower conversion makes the plan harder to justify.</p>
             </div>
             <div className="rounded-full bg-warm px-3 py-1.5 text-xs font-extrabold text-ink">
-              {imported ? `${rows.length} imported rows` : "Workbook-style scenarios"}
+              {imported ? `${rows.length} imported plans` : `${rows.length} working plans`}
             </div>
           </div>
+
           <div className="no-scrollbar overflow-auto">
-            <table className="pnl-table w-full min-w-[980px] border-separate border-spacing-0 text-sm">
+            <table className="pnl-table w-full min-w-[1320px] border-separate border-spacing-0 text-sm">
               <thead className="text-[11px] uppercase tracking-wide text-steel">
                 <tr>
-                {["Clicks", "Impressions", "Budget", "Potential Units", "Sales Increase", "Organic Sales", "Total Sales", "ROAS", "Total ROAS", "TACOS"].map((head) => (
+                  {["Plan", "Budget", "ROAS", "CPC", "CVR", "AOV", "Organic Lift", "Clicks", "Orders", "Paid Sales", "Organic Lift Sales", "Total Sales", "Total ROAS", "TACOS", "Signal", ""].map((head) => (
                     <th key={head} className="whitespace-nowrap border-b border-line px-3 py-3 text-left font-extrabold">{head}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, index) => (
-                  <tr key={`${row.clicks}-${row.budget}-${index}`} className={index === 0 ? "bg-emerald-50/70" : "hover:bg-warm/50"}>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.clicks)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.impressions)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.budget)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.orders)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.paidSales)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.organicSales)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-extrabold text-ink">{currency(row.totalSales)}</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-extrabold text-emerald-700">{row.roas.toFixed(2)}x</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{row.totalRoas.toFixed(2)}x</td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{percent(row.tacos)}</td>
-                  </tr>
-                ))}
+                {plans.map((plan, index) => {
+                  const row = rows[index];
+                  return (
+                    <tr key={`${plan.name}-${index}`} className={index === 0 ? "bg-emerald-50/70" : "hover:bg-warm/50"}>
+                      <td className="border-b border-line px-3 py-3">
+                        <input className="w-32 rounded-md border border-line bg-white px-2 py-1.5 text-xs font-bold outline-none focus:border-brand" value={plan.name} onChange={(event) => updatePlan(index, { name: event.target.value })} />
+                      </td>
+                      <EditableCell value={plan.plannedBudget} step="500" onChange={(value) => updatePlan(index, { plannedBudget: value })} />
+                      <EditableCell value={plan.targetRoas} step="0.1" suffix="x" onChange={(value) => updatePlan(index, { targetRoas: value })} />
+                      <EditableCell value={plan.cpc} step="0.05" onChange={(value) => updatePlan(index, { cpc: value })} />
+                      <EditableCell value={plan.conversionRate * 100} step="0.5" suffix="%" onChange={(value) => updatePlan(index, { conversionRate: value / 100 })} />
+                      <EditableCell value={plan.averageOrderValue} step="1" onChange={(value) => updatePlan(index, { averageOrderValue: value })} />
+                      <EditableCell value={plan.organicLiftMultiplier * 100} step="5" suffix="%" onChange={(value) => updatePlan(index, { organicLiftMultiplier: value / 100 })} />
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.clicks)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.orders)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.paidSales)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.organicSales)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-extrabold text-ink">{currency(row.totalSales)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{row.totalRoas.toFixed(2)}x</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-extrabold">{percent(row.tacos)}</td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-3">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${row.tacos <= baselineTacos ? "bg-emerald-100 text-emerald-800" : row.roas >= baselineRoas ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+                          {row.tacos <= baselineTacos ? "Efficient" : row.roas >= baselineRoas ? "Watch TACOS" : "Risky"}
+                        </span>
+                      </td>
+                      <td className="border-b border-line px-3 py-3">
+                        <button type="button" className="rounded-full p-1.5 text-steel hover:bg-red-50 hover:text-red-700" onClick={() => setPlans((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -230,98 +203,74 @@ export function AdPotential() {
   );
 }
 
-function buildScenarioRows(inputs: AdPotentialInputs, rows: PotentialScenarioInput[]): AdPotentialPlanRow[] {
-  return rows.map((row) => buildScenarioRow(inputs, row));
-}
-
-function buildScenarioRow(inputs: AdPotentialInputs, row: PotentialScenarioInput): AdPotentialPlanRow {
-  const impressionsPerClick = inputs.currentClicks ? inputs.currentImpressions / inputs.currentClicks : 0;
-  const costPerImpression = inputs.currentImpressions ? inputs.currentSpend / inputs.currentImpressions : inputs.cpc;
-  const ordersPerImpression = inputs.currentImpressions ? inputs.currentOrders / inputs.currentImpressions : 0;
-  const currentTotalSales = inputs.currentPaidSales + inputs.currentOrganicSales;
-  const paidShare = currentTotalSales ? inputs.currentPaidSales / currentTotalSales : 1;
-  const effectiveImpressions = row.impressions || row.clicks * impressionsPerClick;
-  const budget = effectiveImpressions * costPerImpression;
-  const clicks = row.clicks;
-  const paidSales = budget * inputs.targetRoas;
-  const totalSales = paidShare ? paidSales / paidShare : paidSales;
-  const organicSales = Math.max(0, totalSales - paidSales);
-  const orders = effectiveImpressions * ordersPerImpression;
+function buildPlanRow(_inputs: AdPotentialInputs, plan: PlanInput): AdPotentialPlanRow {
+  const budget = Math.max(0, plan.plannedBudget);
+  const cpc = Math.max(0.01, plan.cpc);
+  const clicks = budget / cpc;
+  const orders = clicks * Math.max(0, plan.conversionRate);
+  const paidSales = budget * Math.max(0, plan.targetRoas);
+  const demandSales = orders * Math.max(0, plan.averageOrderValue);
+  const modeledPaidSales = paidSales || demandSales;
+  const organicSales = modeledPaidSales * Math.max(0, plan.organicLiftMultiplier);
+  const totalSales = modeledPaidSales + organicSales;
   return {
     clicks,
-    impressions: effectiveImpressions,
+    impressions: 0,
     budget,
-    paidSales,
+    paidSales: modeledPaidSales,
     organicSales,
     totalSales,
-    roas: budget ? paidSales / budget : 0,
+    roas: budget ? modeledPaidSales / budget : 0,
     totalRoas: budget ? totalSales / budget : 0,
     tacos: totalSales ? budget / totalSales : 0,
     orders,
   };
 }
 
-async function parseAdPotentialFile(file: File): Promise<{ inputs: AdPotentialInputs; scenarioInputs: PotentialScenarioInput[] }> {
+async function parseAdPotentialFile(file: File): Promise<{ inputs: AdPotentialInputs; plans: PlanInput[] }> {
+  let matrix: unknown[][];
   if (file.name.toLowerCase().endsWith(".xlsx")) {
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
     const sheet = workbook.Sheets["AD Potential"] ?? workbook.Sheets[workbook.SheetNames[0]];
-    const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
-    return parseAdPotentialMatrix(matrix);
+    matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+  } else {
+    matrix = (await file.text()).split(/\r?\n/).filter(Boolean).map(parseCsvLine);
   }
-  return parseAdPotentialMatrix((await file.text()).split(/\r?\n/).filter(Boolean).map(parseCsvLine));
+  return parseMatrix(matrix);
 }
 
-function parseAdPotentialMatrix(matrix: unknown[][]): { inputs: AdPotentialInputs; scenarioInputs: PotentialScenarioInput[] } {
-  const name = clean(matrix[0]?.[0]) || "Imported AD Potential";
-  const metricHeaderIndex = matrix.findIndex((row) => row.some((cell) => clean(cell) === "Impressions") && row.some((cell) => clean(cell) === "Spend"));
-  const metricHeaders = metricHeaderIndex >= 0 ? matrix[metricHeaderIndex] : [];
-  const metricValues = metricHeaderIndex >= 0 ? matrix[metricHeaderIndex + 1] ?? [] : [];
-  const metric = (label: string) => parseNumber(metricValues[metricHeaders.findIndex((head) => clean(head) === label)]);
-  const currentSpend = metric("Spend") || defaultInputs.currentSpend;
-  const currentImpressions = metric("Impressions") || defaultInputs.currentImpressions;
-  const currentPaidSales = metric("Sales") || defaultInputs.currentPaidSales;
-  const currentOrganicSales = metric("Organic Sales") || defaultInputs.currentOrganicSales;
-  const currentClicks = metric("Clicks") || defaultInputs.currentClicks;
-  const currentOrders = metric("Orders") || defaultInputs.currentOrders;
-  const cpc = metric("CPC") || (currentClicks ? currentSpend / currentClicks : defaultInputs.cpc);
-  const targetAcosRow = matrix.find((row) => row.some((cell) => clean(cell).toLowerCase().includes("target acos")));
-  const targetAcosIndex = targetAcosRow?.findIndex((cell) => clean(cell).toLowerCase().includes("target acos")) ?? -1;
-  const targetAcos = targetAcosRow && targetAcosIndex >= 0 ? parseNumber(targetAcosRow[targetAcosIndex + 1]) : 0.7;
-  const targetRoas = targetAcos ? 1 / targetAcos : defaultInputs.targetRoas;
-
-  const planHeaderIndex = matrix.findIndex((row) => row.some((cell) => clean(cell) === "Clicks") && row.some((cell) => clean(cell) === "Budget") && row.some((cell) => clean(cell) === "Total Sales"));
-  const planHeaders = planHeaderIndex >= 0 ? matrix[planHeaderIndex] : [];
-  const planRows = planHeaderIndex >= 0 ? matrix.slice(planHeaderIndex + 1) : [];
-  const scenarioInputs = planRows
-    .filter((row) => parseNumber(row[0]) > 0)
-    .map((row) => {
-      const value = (label: string) => parseNumber(row[planHeaders.findIndex((head) => clean(head) === label)]);
-      return {
-        clicks: value("Clicks"),
-        impressions: value("Impressions needed"),
-      };
-    });
+function parseMatrix(matrix: unknown[][]): { inputs: AdPotentialInputs; plans: PlanInput[] } {
+  const headersIndex = matrix.findIndex((row) => row.some((cell) => clean(cell).toLowerCase().includes("budget")) && row.some((cell) => clean(cell).toLowerCase().includes("roas")));
+  const headers = headersIndex >= 0 ? matrix[headersIndex].map(clean) : [];
+  const valueAt = (row: unknown[], names: string[]) => {
+    const index = headers.findIndex((header) => names.some((name) => header.toLowerCase().includes(name)));
+    return index >= 0 ? parseNumber(row[index]) : 0;
+  };
+  const planRows = headersIndex >= 0 ? matrix.slice(headersIndex + 1) : [];
+  const plans = planRows
+    .filter((row) => valueAt(row, ["budget", "spend"]) > 0)
+    .map((row, index) => ({
+      name: clean(row[0]) || `Imported ${index + 1}`,
+      plannedBudget: valueAt(row, ["budget", "spend"]),
+      targetRoas: valueAt(row, ["roas"]) || defaultInputs.targetRoas,
+      cpc: valueAt(row, ["cpc"]) || defaultInputs.cpc,
+      conversionRate: normalizePercent(valueAt(row, ["conversion", "cvr"])) || defaultInputs.conversionRate,
+      averageOrderValue: valueAt(row, ["aov", "average order"]) || defaultInputs.averageOrderValue,
+      organicLiftMultiplier: normalizePercent(valueAt(row, ["organic lift", "lift"])) || defaultInputs.organicLiftMultiplier,
+    }));
 
   return {
     inputs: {
       ...defaultInputs,
-      name,
-      currentImpressions,
-      currentSpend,
-      currentPaidSales,
-      currentOrganicSales,
-      currentClicks,
-      currentOrders,
-      cpc,
-      targetRoas,
-      organicLiftMultiplier: currentPaidSales ? currentOrganicSales / currentPaidSales : defaultInputs.organicLiftMultiplier,
-      averageOrderValue: currentOrders ? currentPaidSales / currentOrders : defaultInputs.averageOrderValue,
-      conversionRate: currentClicks && currentImpressions ? currentClicks / currentImpressions : defaultInputs.conversionRate,
-      plannedClicks: scenarioInputs[0]?.clicks ?? defaultInputs.plannedClicks,
-      plannedBudget: scenarioInputs[0]?.impressions ? scenarioInputs[0].impressions * cpc : defaultInputs.plannedBudget,
+      name: clean(matrix[0]?.[0]) || "Imported Ad Potential",
     },
-    scenarioInputs: scenarioInputs.length ? scenarioInputs : defaultScenarioInputs,
+    plans: plans.length ? plans : defaultPlans,
   };
+}
+
+function normalizePercent(value: number) {
+  if (!value) return 0;
+  return value > 1 ? value / 100 : value;
 }
 
 function parseCsvLine(line: string) {
@@ -378,13 +327,25 @@ function NumberInput({ label, value, step, onChange }: { label: string; value: n
           setDraft(event.target.value);
           onChange(event.target.value === "" ? 0 : Number(event.target.value));
         }}
-        onBlur={() => {
-          if (draft !== "" && Number.isFinite(Number(draft))) {
-            setDraft(String(Math.round(Number(draft) * 100) / 100));
-          }
-        }}
       />
     </label>
+  );
+}
+
+function EditableCell({ value, step, suffix = "", onChange }: { value: number; step: string; suffix?: string; onChange: (value: number) => void }) {
+  return (
+    <td className="border-b border-line px-3 py-3">
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          step={step}
+          className="w-24 rounded-md border border-line bg-white px-2 py-1.5 text-right text-xs font-bold outline-none focus:border-brand"
+          value={Math.round(value * 100) / 100 || ""}
+          onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))}
+        />
+        {suffix ? <span className="text-xs font-bold text-steel">{suffix}</span> : null}
+      </div>
+    </td>
   );
 }
 
