@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.tools/
+outputs/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+
+*.xlsx
+*.xls
+*.csv
+*.tsv
+uploads/
+exports/
+client-data/
+reports/
