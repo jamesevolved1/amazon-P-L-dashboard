@@ -316,9 +316,10 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 
         {activeSection === "dashboard" ? (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <KpiCard label="Total Sales" value={currency(summary.totalSales)} helper={`${number(summary.totalUnitsSold)} units`} icon={<TrendingUp className="h-4 w-4" />} />
-              <KpiCard label="Current Ad Spend" value={currency(currentAdSpend)} helper={`${percent(currentTacos)} current TACOS`} tone={currentTacos > summary.breakEvenTacos ? "bad" : "neutral"} icon={<Target className="h-4 w-4" />} />
+              <KpiCard label="Current Ad Spend" value={currency(currentAdSpend)} helper="Actual paid media spend" icon={<Target className="h-4 w-4" />} />
+              <KpiCard label="Account TACOS" value={percent(currentTacos)} helper={`${currency(currentAdSpend)} / ${currency(currentSales)} sales`} tone={currentTacos > summary.breakEvenTacos ? "bad" : "neutral"} icon={<Target className="h-4 w-4" />} />
               <KpiCard label="Current Profit" value={currency(currentProfit)} helper={`${percent(currentProfitMargin)} current margin`} tone={currentProfit < 0 ? "bad" : currentProfitMargin < 0.15 ? "warn" : "good"} icon={<LineChart className="h-4 w-4" />} />
               <KpiCard label="Coupon Cost" value={currency(summary.totalCouponCost)} helper="Shown separately from ad spend" />
               <KpiCard label="SKU Health" value={`${summary.profitableSkus}/${portfolio.rows.length}`} helper={`${summary.unprofitableSkus} unprofitable · ${summary.scaleCandidates} scale candidates`} tone={summary.unprofitableSkus ? "warn" : "good"} icon={<PackageCheck className="h-4 w-4" />} />
