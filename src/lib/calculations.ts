@@ -17,6 +17,14 @@ const keyForSku = (sku: ProductSku) => sku.sku || sku.asin;
 
 const missing = (value: number) => !Number.isFinite(value) || value <= 0;
 
+const isParentOnlyRecord = (sku: ProductSku) => {
+  const hasSku = Boolean(sku.sku?.trim());
+  const asin = sku.asin?.trim();
+  const parentAsin = sku.parentAsin?.trim();
+  const hasCommercialActivity = n(sku.totalSales) > 0 || n(sku.unitsSold) > 0 || n(sku.adSpend) > 0;
+  return !hasSku && Boolean(asin) && Boolean(parentAsin) && asin === parentAsin && !hasCommercialActivity;
+};
+
 export function calculateSkuPnl(
   sku: ProductSku,
   scenario: ScenarioAssumptions,
@@ -210,7 +218,8 @@ export function calculatePortfolio(
   scenario: ScenarioAssumptions,
 ): { rows: CalculatedSkuPnl[]; summary: PortfolioSummary; issues: DataQualityIssue[] } {
   const normalizedScenario = normalizeScenario(scenario);
-  const rows = skus.map((sku) => calculateSkuPnl(sku, normalizedScenario));
+  const modelSkus = skus.filter((sku) => !isParentOnlyRecord(sku));
+  const rows = modelSkus.map((sku) => calculateSkuPnl(sku, normalizedScenario));
   const totalSales = sum(rows, "scenarioSales");
   const estimatedProfit = sum(rows, "estimatedProfit");
   const totalAdSpend = sum(rows, "scenarioAdSpend");
@@ -232,7 +241,7 @@ export function calculatePortfolio(
       unprofitableSkus: rows.filter((row) => row.estimatedProfit < 0).length,
       scaleCandidates: rows.filter((row) => row.status === "Scale Candidate").length,
     },
-    issues: buildQualityIssues(skus, rows),
+    issues: buildQualityIssues(modelSkus, rows),
   };
 }
 
@@ -251,6 +260,7 @@ function sum(rows: CalculatedSkuPnl[], key: keyof CalculatedSkuPnl) {
 }
 
 function skuDataIssues(sku: ProductSku) {
+  if (isParentOnlyRecord(sku)) return [];
   const issues: string[] = [...(sku.importIssues ?? [])];
   if (!sku.asin && !sku.sku) issues.push("Missing ASIN/SKU");
   if (!sku.asin && sku.sku) issues.push("Missing ASIN");
