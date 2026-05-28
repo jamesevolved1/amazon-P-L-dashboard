@@ -48,6 +48,8 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   const [scenarioControlsExpanded, setScenarioControlsExpanded] = useState(false);
   const [activeSection, setActiveSection] = useState<AppSection>("reporting");
   const [clientGoalsOpen, setClientGoalsOpen] = useState<Record<string, boolean>>({});
+  const [deleteClientId, setDeleteClientId] = useState<string | null>(null);
+  const [deleteClientText, setDeleteClientText] = useState("");
   const userId = session?.user.id ?? null;
 
   useEffect(() => {
@@ -402,8 +404,8 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                         <button
                           type="button"
                           onClick={() => {
-                            const confirmed = window.prompt(`Type DELETE to remove ${client.name}.`);
-                            if (confirmed === "DELETE") removeClient(client.id);
+                            setDeleteClientId(client.id);
+                            setDeleteClientText("");
                           }}
                           className="rounded-full border border-red-200 bg-white p-2 text-red-700 transition hover:bg-red-50"
                           aria-label={`Delete ${client.name}`}
@@ -413,6 +415,44 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                         </button>
                       ) : null}
                     </div>
+                    {deleteClientId === client.id ? (
+                      <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
+                        <div className="text-xs font-extrabold uppercase tracking-wide text-red-800">Confirm Delete</div>
+                        <p className="mt-1 text-sm text-red-900">Type DELETE to remove {client.name}.</p>
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                          <input
+                            value={deleteClientText}
+                            onChange={(event) => setDeleteClientText(event.target.value)}
+                            className="min-w-0 flex-1 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-bold text-ink outline-none focus:border-red-500"
+                            placeholder="DELETE"
+                            aria-label={`Type DELETE to remove ${client.name}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteClientId(null);
+                              setDeleteClientText("");
+                            }}
+                            className="rounded-md border border-line bg-white px-4 py-2 text-sm font-extrabold text-ink hover:bg-warm"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (deleteClientText !== "DELETE") return;
+                              removeClient(client.id);
+                              setDeleteClientId(null);
+                              setDeleteClientText("");
+                            }}
+                            disabled={deleteClientText !== "DELETE"}
+                            className="rounded-md bg-red-600 px-4 py-2 text-sm font-extrabold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="mt-2 text-sm font-semibold text-steel">{clientRows ? `${number(clientRows)} imported SKU rows` : "Using sample data until reports are imported"}</div>
                     <button
                       type="button"
