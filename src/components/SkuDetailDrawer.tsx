@@ -12,7 +12,7 @@ export function SkuDetailDrawer({ row, onClose }: SkuDetailDrawerProps) {
   if (!row) return null;
   const profitableRoom = row.scenarioTacos < row.breakEvenTacos;
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/30">
+    <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/30">
       <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
