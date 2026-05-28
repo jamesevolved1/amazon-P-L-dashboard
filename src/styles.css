@@ -51,6 +51,45 @@ select {
   font: inherit;
 }
 
+.pill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--ec-line);
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  color: var(--ec-ink);
+  box-shadow: 0 1px 2px rgba(35, 50, 59, 0.06);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.pill-button:hover {
+  border-color: rgba(244, 115, 34, 0.45);
+  background: var(--ec-cream);
+}
+
+.pill-button.bg-brand {
+  border-color: transparent;
+  background: #1d6680;
+  color: #ffffff;
+}
+
+.pill-button.bg-brand:hover {
+  background: #0f3f52;
+}
+
+.pill-button:active {
+  transform: translateY(1px);
+}
+
 ::selection {
   background: rgba(244, 115, 34, 0.2);
 }

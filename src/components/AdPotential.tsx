@@ -1,359 +1,437 @@
-import { Plus, Trash2, UploadCloud } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
-import { currency, number, percent } from "../lib/format";
-import type { AdPotentialInputs, AdPotentialPlanRow } from "../types/models";
+import { AlertTriangle, Copy, RotateCcw, Sparkles, Table2, Trash2, UploadCloud } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  calculateBaselineMetrics,
+  calculatePlan,
+  calculatePlanLabels,
+  calculateRecommendedPlan,
+  calculateWhatNeedsToBeTrue,
+  initialAdPotentialState,
+  normalizePlannerState,
+  validatePlannerState,
+} from "../lib/adPotentialCalculations";
+import { formatCurrency, formatNumber, formatPercent, formatRoas, signedCurrency, signedPercent } from "../lib/format";
+import type { AdPotentialBaseline, AdPotentialDefaults, AdPotentialPlan, AdPotentialPlannerState, CalculatedAdPotentialPlan } from "../types/models";
 
-type PlanInput = {
-  name: string;
-  plannedBudget: number;
-  targetRoas: number;
-  cpc: number;
-  conversionRate: number;
-  averageOrderValue: number;
-  organicLiftMultiplier: number;
+type AccountBaseline = {
+  currentSpend: number;
+  totalSales: number;
+  currentTacos: number;
 };
 
-const defaultInputs: AdPotentialInputs = {
-  name: "Base Ad Potential",
-  currentImpressions: 100000,
-  currentSpend: 4514,
-  currentPaidSales: 12100,
-  currentOrganicSales: 0,
-  currentClicks: 4500,
-  currentOrders: 550,
-  cpc: 1,
-  targetRoas: 2.5,
-  organicLiftMultiplier: 0.35,
-  averageOrderValue: 22,
-  conversionRate: 0.12,
-  planningMode: "budget",
-  plannedClicks: 6000,
-  plannedBudget: 6000,
-};
+type ViewMode = "cards" | "table";
 
-const defaultPlans: PlanInput[] = [
-  { name: "Conservative", plannedBudget: 4000, targetRoas: 2.5, cpc: 1, conversionRate: 0.1, averageOrderValue: 22, organicLiftMultiplier: 0.2 },
-  { name: "Base Push", plannedBudget: 7000, targetRoas: 2.2, cpc: 1.05, conversionRate: 0.11, averageOrderValue: 22, organicLiftMultiplier: 0.35 },
-  { name: "Aggressive", plannedBudget: 10000, targetRoas: 1.9, cpc: 1.15, conversionRate: 0.1, averageOrderValue: 22, organicLiftMultiplier: 0.5 },
-];
+export function AdPotential({
+  accountBaseline,
+  state,
+  onStateChange,
+}: {
+  accountBaseline?: AccountBaseline;
+  state: AdPotentialPlannerState;
+  onStateChange: (state: AdPotentialPlannerState) => void;
+}) {
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [uploadNote, setUploadNote] = useState("");
+  const planner = useMemo(() => normalizePlannerState(state), [state]);
+  const baselineMetrics = useMemo(() => calculateBaselineMetrics(planner.baseline), [planner.baseline]);
+  const calculatedPlans = useMemo(() => planner.plans.map((plan) => calculatePlan(plan, planner.baseline)), [planner.baseline, planner.plans]);
+  const labels = useMemo(() => calculatePlanLabels(calculatedPlans), [calculatedPlans]);
+  const recommended = calculateRecommendedPlan(calculatedPlans) ?? calculatedPlans[0];
+  const selectedPlan = calculatedPlans.find((plan) => plan.id === planner.selectedPlanId) ?? recommended;
+  const whatNeedsToBeTrue = selectedPlan ? calculateWhatNeedsToBeTrue(selectedPlan) : null;
+  const errors = validatePlannerState(planner);
 
-export function AdPotential() {
-  const [inputs, setInputs] = useState<AdPotentialInputs>(defaultInputs);
-  const [plans, setPlans] = useState<PlanInput[]>(defaultPlans);
-  const [imported, setImported] = useState(false);
-
-  const baselineTotalSales = inputs.currentPaidSales + inputs.currentOrganicSales;
-  const baselineRoas = inputs.currentSpend ? inputs.currentPaidSales / inputs.currentSpend : 0;
-  const baselineTotalRoas = inputs.currentSpend ? baselineTotalSales / inputs.currentSpend : 0;
-  const baselineTacos = baselineTotalSales ? inputs.currentSpend / baselineTotalSales : 0;
-  const baselineCpc = inputs.currentClicks ? inputs.currentSpend / inputs.currentClicks : inputs.cpc;
-  const baselineConversion = inputs.currentClicks ? inputs.currentOrders / inputs.currentClicks : inputs.conversionRate;
-  const baselineAov = inputs.currentOrders ? inputs.currentPaidSales / inputs.currentOrders : inputs.averageOrderValue;
-  const rows = useMemo(() => plans.map((plan) => buildPlanRow(inputs, plan)), [inputs, plans]);
-  const bestProfitSignal = rows.reduce((best, row) => (row.totalSales - row.budget > best.totalSales - best.budget ? row : best), rows[0] ?? buildPlanRow(inputs, defaultPlans[0]));
-
-  const update = <K extends keyof AdPotentialInputs>(key: K, value: AdPotentialInputs[K]) => setInputs((current) => ({ ...current, [key]: value }));
-  const updatePlan = (index: number, patch: Partial<PlanInput>) => setPlans((current) => current.map((plan, itemIndex) => (itemIndex === index ? { ...plan, ...patch } : plan)));
+  const commit = (patch: Partial<AdPotentialPlannerState>) => onStateChange(normalizePlannerState({ ...planner, ...patch }));
+  const updateBaseline = (patch: Partial<AdPotentialBaseline>) => commit({ baseline: { ...planner.baseline, ...patch } });
+  const updateDefaults = (patch: Partial<AdPotentialDefaults>) => commit({ defaults: { ...planner.defaults, ...patch } });
+  const updatePlan = (planId: string, patch: Partial<AdPotentialPlan>) =>
+    commit({ plans: planner.plans.map((plan) => (plan.id === planId ? { ...plan, ...patch } : plan)) });
+  const addPlanFromDefaults = () => {
+    const id = `plan-${Date.now()}`;
+    commit({
+      plans: [
+        ...planner.plans,
+        {
+          id,
+          name: `Plan ${planner.plans.length + 1}`,
+          budget: planner.defaults.plannedBudget,
+          targetRoas: planner.defaults.targetRoas,
+          cpc: planner.defaults.cpc,
+          conversionRate: planner.defaults.conversionRate,
+          averageOrderValue: planner.defaults.averageOrderValue,
+          organicLiftPercent: planner.defaults.organicLiftPercent,
+        },
+      ],
+      selectedPlanId: id,
+    });
+  };
+  const duplicatePlan = (plan: AdPotentialPlan) => {
+    const id = `${plan.id}-copy-${Date.now()}`;
+    commit({ plans: [...planner.plans, { ...plan, id, name: `${plan.name} Copy` }], selectedPlanId: id });
+  };
+  const deletePlan = (planId: string) => {
+    const nextPlans = planner.plans.filter((plan) => plan.id !== planId);
+    commit({ plans: nextPlans, selectedPlanId: nextPlans[0]?.id ?? "" });
+  };
+  const resetPlanToBaseline = (planId: string) =>
+    updatePlan(planId, {
+      cpc: baselineMetrics.baselineCpc || planner.defaults.cpc,
+      conversionRate: baselineMetrics.baselineCvr || planner.defaults.conversionRate,
+      averageOrderValue: baselineMetrics.baselineAov || planner.defaults.averageOrderValue,
+    });
+  const useBaselineFunnelMetrics = () =>
+    updateDefaults({
+      cpc: baselineMetrics.baselineCpc || planner.defaults.cpc,
+      conversionRate: baselineMetrics.baselineCvr || planner.defaults.conversionRate,
+      averageOrderValue: baselineMetrics.baselineAov || planner.defaults.averageOrderValue,
+    });
+  const usePnlBaseline = () => {
+    if (!accountBaseline) return;
+    updateBaseline({
+      spend: accountBaseline.currentSpend,
+      paidSales: accountBaseline.totalSales,
+      organicSales: 0,
+    });
+  };
 
   return (
     <section className="grid gap-5">
       <div className="rounded-lg border border-line bg-white p-5 shadow-card">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">ROAS Growth Model</div>
+            <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Amazon Ads Forecasting</div>
             <h2 className="mt-2 text-2xl font-extrabold text-ink">Ad Potential Planner</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-steel">
-              Plan spend with ROAS, CPC, conversion rate, AOV, and organic lift. The model shows paid sales, total sales, TACOS, and incremental lift.
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-steel">
+              Forecast from the funnel first, then compare the result against the Target ROAS benchmark. The model shows whether the plan is realistic enough for a client strategy call.
             </p>
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-deep">
-            <UploadCloud className="h-4 w-4" />
-            Upload Model
-            <input
-              type="file"
-              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                const parsed = await parseAdPotentialFile(file);
-                setInputs(parsed.inputs);
-                setPlans(parsed.plans);
-                setImported(true);
-              }}
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {accountBaseline ? (
+              <button type="button" className="pill-button" onClick={usePnlBaseline}>
+                <Sparkles className="h-4 w-4" />
+                Use P&L Baseline
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="pill-button bg-brand text-white hover:bg-deep"
+              onClick={() => setUploadNote("Spreadsheet import is staged for a later pass. This planner now saves your manual baseline and plan assumptions.")}
+            >
+              <UploadCloud className="h-4 w-4" />
+              Upload Model
+            </button>
+          </div>
         </div>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <Metric label="Current Paid ROAS" value={`${baselineRoas.toFixed(2)}x`} helper={`${currency(inputs.currentPaidSales)} paid sales`} />
-          <Metric label="Current Total ROAS" value={`${baselineTotalRoas.toFixed(2)}x`} helper={`${currency(baselineTotalSales)} total sales`} />
-          <Metric label="Current TACOS" value={percent(baselineTacos)} helper={`${currency(inputs.currentSpend)} spend`} />
-          <Metric label="Best Plan Total Sales" value={currency(bestProfitSignal.totalSales)} helper={`${bestProfitSignal.totalRoas.toFixed(2)}x total ROAS`} tone="good" />
-          <Metric label="Best Plan TACOS" value={percent(bestProfitSignal.tacos)} helper={`${currency(bestProfitSignal.budget)} budget`} tone={bestProfitSignal.tacos <= baselineTacos ? "good" : "neutral"} />
-        </div>
+        {uploadNote ? <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{uploadNote}</div> : null}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
-        <div className="grid gap-5">
-          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
-            <h3 className="text-lg font-extrabold text-ink">Current Baseline</h3>
-            <p className="mt-1 text-sm leading-5 text-steel">Use current account or portfolio performance as the starting point.</p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <NumberInput label="Current spend" value={inputs.currentSpend} step="100" onChange={(value) => update("currentSpend", value)} />
-              <NumberInput label="Paid sales" value={inputs.currentPaidSales} step="1000" onChange={(value) => update("currentPaidSales", value)} />
-              <NumberInput label="Organic sales" value={inputs.currentOrganicSales} step="1000" onChange={(value) => update("currentOrganicSales", value)} />
-              <NumberInput label="Clicks" value={inputs.currentClicks} step="100" onChange={(value) => update("currentClicks", value)} />
-              <NumberInput label="Orders" value={inputs.currentOrders} step="10" onChange={(value) => update("currentOrders", value)} />
-              <NumberInput label="Impressions" value={inputs.currentImpressions} step="1000" onChange={(value) => update("currentImpressions", value)} />
-            </div>
-          </div>
+      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-9">
+        <Metric label="Current Paid ROAS" value={formatRoas(baselineMetrics.baselinePaidRoas)} helper={formatCurrency(planner.baseline.paidSales)} />
+        <Metric label="Current TACOS" value={formatPercent(baselineMetrics.baselineTacos)} helper={formatCurrency(planner.baseline.spend)} />
+        <Metric label="Baseline CPC" value={formatCurrency(baselineMetrics.baselineCpc)} helper={`${formatNumber(planner.baseline.clicks)} clicks`} />
+        <Metric label="Baseline CVR" value={formatPercent(baselineMetrics.baselineCvr)} helper={`${formatNumber(planner.baseline.orders)} orders`} />
+        <Metric label="Baseline AOV" value={formatCurrency(baselineMetrics.baselineAov)} helper="Paid sales / orders" />
+        <Metric label="Recommended Plan" value={recommended?.name ?? "—"} helper="Most realistic" tone="good" />
+        <Metric label="Projected Total Sales" value={formatCurrency(recommended?.totalSales ?? 0)} helper="Recommended plan" tone="good" />
+        <Metric label="Projected TACOS" value={formatPercent(recommended?.tacos ?? 0)} helper={riskText(recommended)} tone={recommended?.tacos && recommended.tacos <= baselineMetrics.baselineTacos ? "good" : "neutral"} />
+        <Metric label="Projected Paid ROAS" value={formatRoas(recommended?.paidRoas ?? 0)} helper="Funnel forecast" />
+      </section>
 
-          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
-            <div className="flex items-center justify-between gap-3">
+      <div className="grid gap-5 2xl:grid-cols-[430px_minmax(0,1fr)]">
+        <aside className="grid gap-5">
+          <Panel title="Current Baseline" description="Enter current account performance. These metrics become the reality check for each plan.">
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput label="Spend" value={planner.baseline.spend} error={errors["baseline.spend"]} onChange={(value) => updateBaseline({ spend: value })} />
+              <NumberInput label="Paid Sales" value={planner.baseline.paidSales} onChange={(value) => updateBaseline({ paidSales: value })} />
+              <NumberInput label="Organic Sales" value={planner.baseline.organicSales} onChange={(value) => updateBaseline({ organicSales: value })} />
+              <NumberInput label="Clicks" value={planner.baseline.clicks} error={errors["baseline.clicks"]} onChange={(value) => updateBaseline({ clicks: value })} />
+              <NumberInput label="Orders" value={planner.baseline.orders} error={errors["baseline.orders"]} onChange={(value) => updateBaseline({ orders: value })} />
+              <NumberInput label="Impressions" value={planner.baseline.impressions} error={errors["baseline.impressions"]} onChange={(value) => updateBaseline({ impressions: value })} />
+            </div>
+          </Panel>
+
+          <Panel title="Baseline Metrics" description="Read-only funnel metrics from the baseline inputs.">
+            <div className="grid grid-cols-2 gap-3">
+              <ReadOnly label="CPC" value={formatCurrency(baselineMetrics.baselineCpc)} />
+              <ReadOnly label="CVR" value={formatPercent(baselineMetrics.baselineCvr)} />
+              <ReadOnly label="AOV" value={formatCurrency(baselineMetrics.baselineAov)} />
+              <ReadOnly label="CTR" value={formatPercent(baselineMetrics.baselineCtr)} />
+              <ReadOnly label="Paid ROAS" value={formatRoas(baselineMetrics.baselinePaidRoas)} />
+              <ReadOnly label="Total ROAS" value={formatRoas(baselineMetrics.baselineTotalRoas)} />
+              <ReadOnly label="TACOS" value={formatPercent(baselineMetrics.baselineTacos)} />
+              <ReadOnly label="Total Sales" value={formatCurrency(baselineMetrics.baselineTotalSales)} />
+            </div>
+          </Panel>
+
+          <Panel title="Default Plan Assumptions" description="Use these as the seed values when creating a new plan.">
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput label="Planned Budget" value={planner.defaults.plannedBudget} error={errors["defaults.plannedBudget"]} onChange={(value) => updateDefaults({ plannedBudget: value })} />
+              <NumberInput label="Target ROAS" value={planner.defaults.targetRoas} step="0.1" error={errors["defaults.targetRoas"]} onChange={(value) => updateDefaults({ targetRoas: value })} />
+              <NumberInput label="CPC" value={planner.defaults.cpc} step="0.05" error={errors["defaults.cpc"]} onChange={(value) => updateDefaults({ cpc: value })} />
+              <PercentInput label="Conversion Rate" value={planner.defaults.conversionRate} error={errors["defaults.conversionRate"]} onChange={(value) => updateDefaults({ conversionRate: value })} />
+              <NumberInput label="Average Order Value" value={planner.defaults.averageOrderValue} error={errors["defaults.averageOrderValue"]} onChange={(value) => updateDefaults({ averageOrderValue: value })} />
+              <PercentInput label="Organic Lift" value={planner.defaults.organicLiftPercent} error={errors["defaults.organicLiftPercent"]} onChange={(value) => updateDefaults({ organicLiftPercent: value })} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <button type="button" className="pill-button justify-center" onClick={useBaselineFunnelMetrics}>Use Baseline Funnel Metrics</button>
+              <button type="button" className="pill-button justify-center bg-brand text-white hover:bg-deep" onClick={addPlanFromDefaults}>Add Plan From Defaults</button>
+            </div>
+          </Panel>
+        </aside>
+
+        <section className="grid gap-5">
+          <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+            <div className="flex flex-col gap-3 border-b border-line p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h3 className="text-lg font-extrabold text-ink">Default Assumptions</h3>
-                <p className="mt-1 text-sm leading-5 text-steel">These seed new plan rows. Each row can still be changed individually.</p>
+                <h3 className="text-lg font-extrabold text-ink">Plan Comparison</h3>
+                <p className="mt-1 text-sm text-steel">Funnel forecast versus Target ROAS requirement, with risk pressure-testing on every plan.</p>
               </div>
-              <button
-                type="button"
-                className="rounded-full bg-brand p-2 text-white hover:bg-deep"
-                onClick={() => setPlans((current) => [...current, { name: `Plan ${current.length + 1}`, plannedBudget: inputs.plannedBudget || inputs.currentSpend, targetRoas: inputs.targetRoas, cpc: inputs.cpc || baselineCpc, conversionRate: inputs.conversionRate || baselineConversion, averageOrderValue: inputs.averageOrderValue || baselineAov, organicLiftMultiplier: inputs.organicLiftMultiplier }])}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+              <div className="inline-flex rounded-full border border-line bg-warm p-1">
+                <button className={viewButton(viewMode === "cards")} type="button" onClick={() => setViewMode("cards")}>Cards</button>
+                <button className={viewButton(viewMode === "table")} type="button" onClick={() => setViewMode("table")}><Table2 className="h-4 w-4" /> Table</button>
+              </div>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <NumberInput label="Target ROAS" value={inputs.targetRoas} step="0.1" onChange={(value) => update("targetRoas", value)} />
-              <NumberInput label="CPC" value={inputs.cpc} step="0.05" onChange={(value) => update("cpc", value)} />
-              <NumberInput label="Conversion %" value={inputs.conversionRate * 100} step="0.5" onChange={(value) => update("conversionRate", value / 100)} />
-              <NumberInput label="Average order value" value={inputs.averageOrderValue} step="1" onChange={(value) => update("averageOrderValue", value)} />
-              <NumberInput label="Organic lift %" value={inputs.organicLiftMultiplier * 100} step="5" onChange={(value) => update("organicLiftMultiplier", value / 100)} />
-              <NumberInput label="Planned budget" value={inputs.plannedBudget} step="500" onChange={(value) => update("plannedBudget", value)} />
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg border border-line bg-warm/60 p-3">
-              <MiniFormula label="Baseline CPC" value={currency(baselineCpc)} />
-              <MiniFormula label="Baseline CVR" value={percent(baselineConversion)} />
-              <MiniFormula label="Baseline AOV" value={currency(baselineAov)} />
-            </div>
-          </div>
-        </div>
 
-        <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
-          <div className="flex flex-col gap-3 border-b border-line p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h3 className="text-lg font-extrabold text-ink">Potential Plans</h3>
-              <p className="mt-1 text-sm text-steel">Edit any row. Higher ROAS and organic lift improve efficiency; higher CPC or lower conversion makes the plan harder to justify.</p>
-            </div>
-            <div className="rounded-full bg-warm px-3 py-1.5 text-xs font-extrabold text-ink">
-              {imported ? `${rows.length} imported plans` : `${rows.length} working plans`}
-            </div>
+            {viewMode === "cards" ? (
+              <div className="grid gap-4 p-5 xl:grid-cols-2">
+                {calculatedPlans.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    labels={labels.find((item) => item.planId === plan.id)?.labels ?? []}
+                    isSelected={selectedPlan?.id === plan.id}
+                    errors={errors}
+                    onSelect={() => commit({ selectedPlanId: plan.id })}
+                    onUpdate={(patch) => updatePlan(plan.id, patch)}
+                    onDuplicate={() => duplicatePlan(plan)}
+                    onDelete={() => deletePlan(plan.id)}
+                    onReset={() => resetPlanToBaseline(plan.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <PlanTable
+                plans={calculatedPlans}
+                labels={labels}
+                selectedPlanId={selectedPlan?.id}
+                errors={errors}
+                onSelect={(id) => commit({ selectedPlanId: id })}
+                onUpdate={updatePlan}
+                onDuplicate={(plan) => duplicatePlan(plan)}
+                onDelete={deletePlan}
+                onReset={resetPlanToBaseline}
+              />
+            )}
           </div>
 
-          <div className="no-scrollbar overflow-auto">
-            <table className="pnl-table w-full min-w-[1320px] border-separate border-spacing-0 text-sm">
-              <thead className="text-[11px] uppercase tracking-wide text-steel">
-                <tr>
-                  {["Plan", "Budget", "ROAS", "CPC", "CVR", "AOV", "Organic Lift", "Clicks", "Orders", "Paid Sales", "Organic Lift Sales", "Total Sales", "Total ROAS", "TACOS", "Signal", ""].map((head) => (
-                    <th key={head} className="whitespace-nowrap border-b border-line px-3 py-3 text-left font-extrabold">{head}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {plans.map((plan, index) => {
-                  const row = rows[index];
-                  return (
-                    <tr key={`${plan.name}-${index}`} className={index === 0 ? "bg-emerald-50/70" : "hover:bg-warm/50"}>
-                      <td className="border-b border-line px-3 py-3">
-                        <input className="w-32 rounded-md border border-line bg-white px-2 py-1.5 text-xs font-bold outline-none focus:border-brand" value={plan.name} onChange={(event) => updatePlan(index, { name: event.target.value })} />
-                      </td>
-                      <EditableCell value={plan.plannedBudget} step="500" onChange={(value) => updatePlan(index, { plannedBudget: value })} />
-                      <EditableCell value={plan.targetRoas} step="0.1" suffix="x" onChange={(value) => updatePlan(index, { targetRoas: value })} />
-                      <EditableCell value={plan.cpc} step="0.05" onChange={(value) => updatePlan(index, { cpc: value })} />
-                      <EditableCell value={plan.conversionRate * 100} step="0.5" suffix="%" onChange={(value) => updatePlan(index, { conversionRate: value / 100 })} />
-                      <EditableCell value={plan.averageOrderValue} step="1" onChange={(value) => updatePlan(index, { averageOrderValue: value })} />
-                      <EditableCell value={plan.organicLiftMultiplier * 100} step="5" suffix="%" onChange={(value) => updatePlan(index, { organicLiftMultiplier: value / 100 })} />
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.clicks)}</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{number(row.orders)}</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.paidSales)}</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{currency(row.organicSales)}</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-extrabold text-ink">{currency(row.totalSales)}</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right">{row.totalRoas.toFixed(2)}x</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3 text-right font-extrabold">{percent(row.tacos)}</td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-3">
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${row.tacos <= baselineTacos ? "bg-emerald-100 text-emerald-800" : row.roas >= baselineRoas ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                          {row.tacos <= baselineTacos ? "Efficient" : row.roas >= baselineRoas ? "Watch TACOS" : "Risky"}
-                        </span>
-                      </td>
-                      <td className="border-b border-line px-3 py-3">
-                        <button type="button" className="rounded-full p-1.5 text-steel hover:bg-red-50 hover:text-red-700" onClick={() => setPlans((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          {selectedPlan && whatNeedsToBeTrue ? (
+            <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">What Needs To Be True</div>
+                  <h3 className="mt-2 text-xl font-extrabold text-ink">{selectedPlan.name}</h3>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-steel">
+                    To hit {formatRoas(selectedPlan.targetRoas)} ROAS at a {formatCurrency(selectedPlan.budget)} budget, the funnel needs the assumptions below to hold.
+                  </p>
+                </div>
+                <RiskBadge label={selectedPlan.riskLabel} />
+              </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <ReadOnly label="Required Paid Sales" value={formatCurrency(whatNeedsToBeTrue.requiredPaidSales)} helper={`Current forecast ${formatCurrency(selectedPlan.paidSales)}`} />
+                <ReadOnly label="Required Orders" value={formatNumber(whatNeedsToBeTrue.requiredOrders)} helper={`Projected ${formatNumber(selectedPlan.orders)}`} />
+                <ReadOnly label="Required CVR" value={formatPercent(whatNeedsToBeTrue.requiredCvr)} helper={`Plan ${formatPercent(selectedPlan.conversionRate)} · Baseline ${formatPercent(baselineMetrics.baselineCvr)}`} />
+                <ReadOnly label="Required AOV" value={formatCurrency(whatNeedsToBeTrue.requiredAov)} helper={`Plan ${formatCurrency(selectedPlan.averageOrderValue)}`} />
+                <ReadOnly label="Required CPC" value={formatCurrency(whatNeedsToBeTrue.requiredCpc)} helper={`Plan ${formatCurrency(selectedPlan.cpc)}`} />
+              </div>
+              <div className={`mt-5 rounded-lg border p-4 ${selectedPlan.targetGap >= 0 ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-red-200 bg-red-50 text-red-900"}`}>
+                <div className="font-extrabold">
+                  Gap: {signedCurrency(selectedPlan.targetGap)} / {signedPercent(selectedPlan.targetGapPercent)}
+                </div>
+                <div className="mt-1 text-sm font-semibold">
+                  {selectedPlan.targetGap >= 0 ? "The funnel forecast supports the Target ROAS benchmark." : `${formatCurrency(Math.abs(selectedPlan.targetGap))} below target. Improve CPC, CVR, AOV, or lower the target/budget.`}
+                </div>
+              </div>
+            </section>
+          ) : null}
+        </section>
       </div>
     </section>
   );
 }
 
-function buildPlanRow(_inputs: AdPotentialInputs, plan: PlanInput): AdPotentialPlanRow {
-  const budget = Math.max(0, plan.plannedBudget);
-  const cpc = Math.max(0.01, plan.cpc);
-  const clicks = budget / cpc;
-  const orders = clicks * Math.max(0, plan.conversionRate);
-  const paidSales = budget * Math.max(0, plan.targetRoas);
-  const demandSales = orders * Math.max(0, plan.averageOrderValue);
-  const modeledPaidSales = paidSales || demandSales;
-  const organicSales = modeledPaidSales * Math.max(0, plan.organicLiftMultiplier);
-  const totalSales = modeledPaidSales + organicSales;
-  return {
-    clicks,
-    impressions: 0,
-    budget,
-    paidSales: modeledPaidSales,
-    organicSales,
-    totalSales,
-    roas: budget ? modeledPaidSales / budget : 0,
-    totalRoas: budget ? totalSales / budget : 0,
-    tacos: totalSales ? budget / totalSales : 0,
-    orders,
-  };
+function PlanCard({
+  plan,
+  labels,
+  isSelected,
+  errors,
+  onSelect,
+  onUpdate,
+  onDuplicate,
+  onDelete,
+  onReset,
+}: {
+  plan: CalculatedAdPotentialPlan;
+  labels: string[];
+  isSelected: boolean;
+  errors: Record<string, string>;
+  onSelect: () => void;
+  onUpdate: (patch: Partial<AdPotentialPlan>) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <article className={`rounded-lg border p-4 shadow-sm transition ${isSelected ? "border-brand bg-brand/5 ring-2 ring-brand/10" : "border-line bg-white"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <input className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-lg font-extrabold text-ink outline-none focus:border-line focus:bg-white" value={plan.name} onChange={(event) => onUpdate({ name: event.target.value })} onFocus={onSelect} />
+        <RiskBadge label={plan.riskLabel} />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {labels.map((label) => <span key={label} className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-extrabold text-emerald-800">{label}</span>)}
+      </div>
+      <button type="button" className="mt-4 w-full rounded-lg border border-line bg-warm/50 p-3 text-left hover:border-brand" onClick={onSelect}>
+        <div className="text-sm font-extrabold text-ink">Funnel Forecast: {formatCurrency(plan.paidSales)} paid sales / {formatRoas(plan.paidRoas)} ROAS</div>
+        <div className="mt-1 text-sm text-steel">Target Needed: {formatCurrency(plan.targetPaidSales)} paid sales / {formatRoas(plan.targetRoas)} ROAS</div>
+        <div className={`mt-1 text-sm font-extrabold ${plan.targetGap >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          Gap: {signedCurrency(plan.targetGap)} / {signedPercent(plan.targetGapPercent)}
+        </div>
+        <div className="mt-1 text-sm text-steel">Projected Total Sales: {formatCurrency(plan.totalSales)} · TACOS: {formatPercent(plan.tacos)}</div>
+      </button>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <NumberInput label="Budget" value={plan.budget} error={errors[`plans.${plan.id}.budget`]} onChange={(value) => onUpdate({ budget: value })} />
+        <NumberInput label="Target ROAS" value={plan.targetRoas} step="0.1" error={errors[`plans.${plan.id}.targetRoas`]} onChange={(value) => onUpdate({ targetRoas: value })} />
+        <NumberInput label="CPC" value={plan.cpc} step="0.05" error={errors[`plans.${plan.id}.cpc`]} onChange={(value) => onUpdate({ cpc: value })} />
+        <PercentInput label="CVR" value={plan.conversionRate} error={errors[`plans.${plan.id}.conversionRate`]} onChange={(value) => onUpdate({ conversionRate: value })} />
+        <NumberInput label="AOV" value={plan.averageOrderValue} error={errors[`plans.${plan.id}.averageOrderValue`]} onChange={(value) => onUpdate({ averageOrderValue: value })} />
+        <PercentInput label="Organic Lift" value={plan.organicLiftPercent} error={errors[`plans.${plan.id}.organicLiftPercent`]} onChange={(value) => onUpdate({ organicLiftPercent: value })} />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-line bg-warm/50 p-3 text-sm">
+        <Mini label="Clicks" value={formatNumber(plan.clicks)} />
+        <Mini label="Orders" value={formatNumber(plan.orders)} />
+        <Mini label="Organic Lift Sales" value={formatCurrency(plan.organicLiftSales)} />
+        <Mini label="Projected TACOS" value={formatPercent(plan.tacos)} />
+      </div>
+      {plan.warnings.length ? (
+        <div className="mt-4 grid gap-2">
+          {plan.warnings.map((warning) => (
+            <div key={warning} className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {warning}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <PlanActions onDuplicate={onDuplicate} onDelete={onDelete} onReset={onReset} />
+    </article>
+  );
 }
 
-async function parseAdPotentialFile(file: File): Promise<{ inputs: AdPotentialInputs; plans: PlanInput[] }> {
-  let matrix: unknown[][];
-  if (file.name.toLowerCase().endsWith(".xlsx")) {
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
-    const sheet = workbook.Sheets["AD Potential"] ?? workbook.Sheets[workbook.SheetNames[0]];
-    matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
-  } else {
-    matrix = (await file.text()).split(/\r?\n/).filter(Boolean).map(parseCsvLine);
-  }
-  return parseMatrix(matrix);
+function PlanTable({
+  plans,
+  labels,
+  selectedPlanId,
+  errors,
+  onSelect,
+  onUpdate,
+  onDuplicate,
+  onDelete,
+  onReset,
+}: {
+  plans: CalculatedAdPotentialPlan[];
+  labels: Array<{ planId: string; labels: string[] }>;
+  selectedPlanId?: string;
+  errors: Record<string, string>;
+  onSelect: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<AdPotentialPlan>) => void;
+  onDuplicate: (plan: AdPotentialPlan) => void;
+  onDelete: (id: string) => void;
+  onReset: (id: string) => void;
+}) {
+  return (
+    <div className="no-scrollbar overflow-auto">
+      <table className="pnl-table w-full min-w-[1720px] border-separate border-spacing-0 text-sm">
+        <thead className="text-[11px] uppercase tracking-wide text-steel">
+          <tr>
+            {["Plan", "Budget", "Target", "CPC", "CVR", "AOV", "Lift", "Clicks", "Orders", "Paid Sales", "Paid ROAS", "Total Sales", "TACOS", "Gap", "Risk", "Badges", "Actions"].map((head) => (
+              <th key={head} className="whitespace-nowrap border-b border-line bg-white px-3 py-3 text-left font-extrabold">{head}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {plans.map((plan) => (
+            <tr key={plan.id} className={selectedPlanId === plan.id ? "bg-brand/5" : "hover:bg-warm/50"} onClick={() => onSelect(plan.id)}>
+              <td className="border-b border-line px-3 py-3"><input className="w-40 rounded-md border border-line px-2 py-1.5 text-xs font-bold" value={plan.name} onChange={(event) => onUpdate(plan.id, { name: event.target.value })} /></td>
+              <TableInput value={plan.budget} error={errors[`plans.${plan.id}.budget`]} onChange={(value) => onUpdate(plan.id, { budget: value })} />
+              <TableInput value={plan.targetRoas} error={errors[`plans.${plan.id}.targetRoas`]} onChange={(value) => onUpdate(plan.id, { targetRoas: value })} />
+              <TableInput value={plan.cpc} error={errors[`plans.${plan.id}.cpc`]} onChange={(value) => onUpdate(plan.id, { cpc: value })} />
+              <TableInput value={plan.conversionRate * 100} error={errors[`plans.${plan.id}.conversionRate`]} onChange={(value) => onUpdate(plan.id, { conversionRate: normalizePercentInput(value) })} />
+              <TableInput value={plan.averageOrderValue} error={errors[`plans.${plan.id}.averageOrderValue`]} onChange={(value) => onUpdate(plan.id, { averageOrderValue: value })} />
+              <TableInput value={plan.organicLiftPercent * 100} error={errors[`plans.${plan.id}.organicLiftPercent`]} onChange={(value) => onUpdate(plan.id, { organicLiftPercent: normalizePercentInput(value) })} />
+              <td className="border-b border-line px-3 py-3 text-right">{formatNumber(plan.clicks)}</td>
+              <td className="border-b border-line px-3 py-3 text-right">{formatNumber(plan.orders)}</td>
+              <td className="border-b border-line px-3 py-3 text-right font-extrabold">{formatCurrency(plan.paidSales)}</td>
+              <td className="border-b border-line px-3 py-3 text-right">{formatRoas(plan.paidRoas)}</td>
+              <td className="border-b border-line px-3 py-3 text-right font-extrabold">{formatCurrency(plan.totalSales)}</td>
+              <td className="border-b border-line px-3 py-3 text-right">{formatPercent(plan.tacos)}</td>
+              <td className={`border-b border-line px-3 py-3 text-right font-extrabold ${plan.targetGap >= 0 ? "text-emerald-700" : "text-red-700"}`}>{signedCurrency(plan.targetGap)}</td>
+              <td className="border-b border-line px-3 py-3"><RiskBadge label={plan.riskLabel} /></td>
+              <td className="border-b border-line px-3 py-3">{labels.find((item) => item.planId === plan.id)?.labels.join(", ") || "—"}</td>
+              <td className="border-b border-line px-3 py-3"><PlanActions compact onDuplicate={() => onDuplicate(plan)} onDelete={() => onDelete(plan.id)} onReset={() => onReset(plan.id)} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
-function parseMatrix(matrix: unknown[][]): { inputs: AdPotentialInputs; plans: PlanInput[] } {
-  const headersIndex = matrix.findIndex((row) => row.some((cell) => clean(cell).toLowerCase().includes("budget")) && row.some((cell) => clean(cell).toLowerCase().includes("roas")));
-  const headers = headersIndex >= 0 ? matrix[headersIndex].map(clean) : [];
-  const valueAt = (row: unknown[], names: string[]) => {
-    const index = headers.findIndex((header) => names.some((name) => header.toLowerCase().includes(name)));
-    return index >= 0 ? parseNumber(row[index]) : 0;
-  };
-  const planRows = headersIndex >= 0 ? matrix.slice(headersIndex + 1) : [];
-  const plans = planRows
-    .filter((row) => valueAt(row, ["budget", "spend"]) > 0)
-    .map((row, index) => ({
-      name: clean(row[0]) || `Imported ${index + 1}`,
-      plannedBudget: valueAt(row, ["budget", "spend"]),
-      targetRoas: valueAt(row, ["roas"]) || defaultInputs.targetRoas,
-      cpc: valueAt(row, ["cpc"]) || defaultInputs.cpc,
-      conversionRate: normalizePercent(valueAt(row, ["conversion", "cvr"])) || defaultInputs.conversionRate,
-      averageOrderValue: valueAt(row, ["aov", "average order"]) || defaultInputs.averageOrderValue,
-      organicLiftMultiplier: normalizePercent(valueAt(row, ["organic lift", "lift"])) || defaultInputs.organicLiftMultiplier,
-    }));
-
-  return {
-    inputs: {
-      ...defaultInputs,
-      name: clean(matrix[0]?.[0]) || "Imported Ad Potential",
-    },
-    plans: plans.length ? plans : defaultPlans,
-  };
+function Panel({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+      <h3 className="text-lg font-extrabold text-ink">{title}</h3>
+      <p className="mt-1 text-sm leading-5 text-steel">{description}</p>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
 }
 
-function normalizePercent(value: number) {
-  if (!value) return 0;
-  return value > 1 ? value / 100 : value;
-}
-
-function parseCsvLine(line: string) {
-  const cells: string[] = [];
-  let current = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-    if (char === '"' && quoted && next === '"') {
-      current += '"';
-      index += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === "," && !quoted) {
-      cells.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  cells.push(current.trim());
-  return cells;
-}
-
-function clean(value: unknown) {
-  return String(value ?? "").trim();
-}
-
-function parseNumber(value: unknown) {
-  if (!value) return 0;
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const text = clean(value);
-  const isPercent = text.includes("%");
-  const parsed = Number(text.replace(/[$,%"]/g, "").replace(/,/g, ""));
-  if (!Number.isFinite(parsed)) return 0;
-  return isPercent ? parsed / 100 : parsed;
-}
-
-function NumberInput({ label, value, step, onChange }: { label: string; value: number; step: string; onChange: (value: number) => void }) {
-  const [draft, setDraft] = useState(value === 0 ? "" : String(Math.round(value * 100) / 100));
-  useEffect(() => {
-    setDraft(value === 0 ? "" : String(Math.round(value * 100) / 100));
-  }, [value]);
+function NumberInput({ label, value, step = "100", error, onChange }: { label: string; value: number; step?: string; error?: string; onChange: (value: number) => void }) {
   return (
     <label className="block">
       <span className="text-sm font-bold text-ink">{label}</span>
-      <input
-        type="number"
-        step={step}
-        className="mt-2 w-full rounded-md border border-line px-3 py-2.5 text-sm font-medium outline-none focus:border-brand"
-        value={draft}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          onChange(event.target.value === "" ? 0 : Number(event.target.value));
-        }}
-      />
+      <input type="number" step={step} className={`mt-2 w-full rounded-md border px-3 py-2.5 text-sm font-medium outline-none focus:border-brand ${error ? "border-red-300 bg-red-50" : "border-line bg-white"}`} value={inputValue(value)} onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))} />
+      {error ? <span className="mt-1 block text-xs font-semibold text-red-700">{error}</span> : null}
     </label>
   );
 }
 
-function EditableCell({ value, step, suffix = "", onChange }: { value: number; step: string; suffix?: string; onChange: (value: number) => void }) {
+function PercentInput({ label, value, error, onChange }: { label: string; value: number; error?: string; onChange: (value: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-ink">{label}</span>
+      <div className={`mt-2 flex items-center rounded-md border bg-white px-3 py-2.5 focus-within:border-brand ${error ? "border-red-300 bg-red-50" : "border-line"}`}>
+        <input type="number" step="1" className="w-full bg-transparent text-sm font-medium outline-none" value={inputValue(value * 100)} onChange={(event) => onChange(normalizePercentInput(event.target.value === "" ? 0 : Number(event.target.value)))} />
+        <span className="text-sm font-bold text-steel">%</span>
+      </div>
+      {error ? <span className="mt-1 block text-xs font-semibold text-red-700">{error}</span> : null}
+    </label>
+  );
+}
+
+function TableInput({ value, error, onChange }: { value: number; error?: string; onChange: (value: number) => void }) {
   return (
     <td className="border-b border-line px-3 py-3">
-      <div className="flex items-center gap-1">
-        <input
-          type="number"
-          step={step}
-          className="w-24 rounded-md border border-line bg-white px-2 py-1.5 text-right text-xs font-bold outline-none focus:border-brand"
-          value={Math.round(value * 100) / 100 || ""}
-          onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))}
-        />
-        {suffix ? <span className="text-xs font-bold text-steel">{suffix}</span> : null}
-      </div>
+      <input className={`w-24 rounded-md border px-2 py-1.5 text-right text-xs font-bold outline-none focus:border-brand ${error ? "border-red-300 bg-red-50" : "border-line bg-white"}`} type="number" value={inputValue(value)} onClick={(event) => event.stopPropagation()} onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))} />
     </td>
   );
 }
 
-function MiniFormula({ label, value }: { label: string; value: string }) {
+function ReadOnly({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
-    <div className="rounded-md bg-white px-2 py-2">
-      <div className="text-[10px] font-extrabold uppercase tracking-wide text-steel">{label}</div>
-      <div className="mt-1 text-sm font-extrabold text-ink">{value}</div>
+    <div className="rounded-lg border border-line bg-warm/60 px-3 py-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-steel">{label}</div>
+      <div className="mt-1 text-lg font-extrabold text-ink">{value || "—"}</div>
+      {helper ? <div className="mt-1 text-xs font-medium text-steel">{helper}</div> : null}
     </div>
   );
 }
@@ -361,9 +439,57 @@ function MiniFormula({ label, value }: { label: string; value: string }) {
 function Metric({ label, value, helper, tone = "neutral" }: { label: string; value: string; helper: string; tone?: "neutral" | "good" }) {
   return (
     <div className={`rounded-lg border p-4 shadow-sm ${tone === "good" ? "border-emerald-200 bg-emerald-50" : "border-line bg-white"}`}>
-      <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-steel">{label}</div>
-      <div className="mt-3 text-2xl font-extrabold text-ink">{value}</div>
-      <div className="mt-1 text-xs font-medium text-steel">{helper}</div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-steel">{label}</div>
+      <div className="mt-3 truncate text-xl font-extrabold text-ink" title={value}>{value || "—"}</div>
+      <div className="mt-1 truncate text-xs font-medium text-steel" title={helper}>{helper}</div>
     </div>
   );
+}
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-extrabold uppercase tracking-wide text-steel">{label}</div>
+      <div className="mt-1 font-extrabold text-ink">{value}</div>
+    </div>
+  );
+}
+
+function PlanActions({ compact = false, onDuplicate, onDelete, onReset }: { compact?: boolean; onDuplicate: () => void; onDelete: () => void; onReset: () => void }) {
+  return (
+    <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4"}`}>
+      <button type="button" className="pill-button px-3 py-1.5 text-xs" onClick={(event) => { event.stopPropagation(); onDuplicate(); }}><Copy className="h-3.5 w-3.5" /> Duplicate</button>
+      <button type="button" className="pill-button px-3 py-1.5 text-xs" onClick={(event) => { event.stopPropagation(); onReset(); }}><RotateCcw className="h-3.5 w-3.5" /> Reset</button>
+      <button type="button" className="pill-button px-3 py-1.5 text-xs hover:border-red-300 hover:bg-red-50 hover:text-red-700" onClick={(event) => { event.stopPropagation(); onDelete(); }}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+    </div>
+  );
+}
+
+function RiskBadge({ label }: { label: CalculatedAdPotentialPlan["riskLabel"] }) {
+  const className =
+    label === "Low Risk"
+      ? "bg-emerald-100 text-emerald-800"
+      : label === "Moderate Risk"
+        ? "bg-amber-100 text-amber-800"
+        : label === "Aggressive"
+          ? "bg-orange-100 text-orange-800"
+          : "bg-red-100 text-red-800";
+  return <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-extrabold ${className}`}>{label}</span>;
+}
+
+function viewButton(active: boolean) {
+  return `inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide transition ${active ? "bg-white text-ink shadow-sm" : "text-steel hover:text-ink"}`;
+}
+
+function riskText(plan?: CalculatedAdPotentialPlan) {
+  return plan ? plan.riskLabel : "No plan selected";
+}
+
+function normalizePercentInput(value: number) {
+  return value > 1 ? value / 100 : value;
+}
+
+function inputValue(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "";
+  return String(Math.round(value * 100) / 100);
 }

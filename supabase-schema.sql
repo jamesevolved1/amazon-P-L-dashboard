@@ -16,10 +16,14 @@ create table if not exists client_workspaces (
   sku_data jsonb not null default '[]',
   import_warnings jsonb not null default '[]',
   data_quality_issues jsonb not null default '[]',
+  ad_potential_state jsonb not null default '{}',
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique(client_id)
 );
+
+alter table client_workspaces
+add column if not exists ad_potential_state jsonb not null default '{}';
 
 create table if not exists scenarios (
   id uuid primary key default gen_random_uuid(),

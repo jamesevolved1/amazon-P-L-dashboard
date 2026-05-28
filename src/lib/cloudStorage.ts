@@ -1,13 +1,15 @@
 import { defaultScenario } from "./mockData";
 import { defaultClients } from "./storage";
+import { normalizePlannerState } from "./adPotentialCalculations";
 import { supabase } from "./supabase";
-import type { ClientAccount, ProductSku, ScenarioAssumptions } from "../types/models";
+import type { AdPotentialPlannerState, ClientAccount, ProductSku, ScenarioAssumptions } from "../types/models";
 
 export interface CloudState {
   clients: ClientAccount[];
   activeClientId: string;
   clientSkuData: Record<string, ProductSku[]>;
   workspaceWarnings: Record<string, string[]>;
+  adPotentialStates: Record<string, AdPotentialPlannerState>;
   scenarios: ScenarioAssumptions[];
 }
 
@@ -23,6 +25,7 @@ interface WorkspaceRow {
   client_id: string;
   sku_data: ProductSku[] | null;
   import_warnings: string[] | null;
+  ad_potential_state: AdPotentialPlannerState | null;
 }
 
 interface ScenarioRow {
@@ -62,7 +65,7 @@ export async function loadCloudState(userId: string): Promise<CloudState> {
 
   const clientIds = clients.map((item) => item.id);
   const [{ data: workspaceRows, error: workspaceError }, { data: scenarioRows, error: scenariosError }] = await Promise.all([
-    client.from("client_workspaces").select("client_id,sku_data,import_warnings").in("client_id", clientIds),
+    client.from("client_workspaces").select("client_id,sku_data,import_warnings,ad_potential_state").in("client_id", clientIds),
     client.from("scenarios").select("assumptions").in("client_id", clientIds).order("created_at", { ascending: true }),
   ]);
 
@@ -77,12 +80,17 @@ export async function loadCloudState(userId: string): Promise<CloudState> {
     acc[row.client_id] = row.import_warnings ?? [];
     return acc;
   }, {});
+  const adPotentialStates = ((workspaceRows as WorkspaceRow[] | null) ?? []).reduce<Record<string, AdPotentialPlannerState>>((acc, row) => {
+    if (row.ad_potential_state) acc[row.client_id] = normalizePlannerState(row.ad_potential_state);
+    return acc;
+  }, {});
 
   return {
     clients,
     activeClientId: clients[0]?.id ?? "",
     clientSkuData,
     workspaceWarnings,
+    adPotentialStates,
     scenarios: ((scenarioRows as ScenarioRow[] | null) ?? []).map((row) => ({ ...defaultScenario, ...row.assumptions })),
   };
 }
@@ -123,14 +131,27 @@ export async function deleteCloudClient(userId: string, clientId: string) {
   if (error) throw error;
 }
 
-export async function saveCloudWorkspace(userId: string, clientId: string, skuData: ProductSku[], importWarnings: string[]) {
+export async function saveCloudWorkspace(userId: string, clientId: string, skuData: ProductSku[], importWarnings: string[], adPotentialState?: AdPotentialPlannerState) {
+  const client = requireSupabase();
+  const payload: Record<string, unknown> = {
+    user_id: userId,
+    client_id: clientId,
+    sku_data: skuData,
+    import_warnings: importWarnings,
+    updated_at: new Date().toISOString(),
+  };
+  if (adPotentialState) payload.ad_potential_state = normalizePlannerState(adPotentialState);
+  const { error } = await client.from("client_workspaces").upsert(payload, { onConflict: "client_id" });
+  if (error) throw error;
+}
+
+export async function saveCloudAdPotentialState(userId: string, clientId: string, state: AdPotentialPlannerState) {
   const client = requireSupabase();
   const { error } = await client.from("client_workspaces").upsert(
     {
       user_id: userId,
       client_id: clientId,
-      sku_data: skuData,
-      import_warnings: importWarnings,
+      ad_potential_state: normalizePlannerState(state),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "client_id" },

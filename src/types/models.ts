@@ -186,35 +186,88 @@ export interface ClientAccount {
   couponPercent?: number;
 }
 
-export interface AdPotentialInputs {
-  name: string;
-  currentImpressions: number;
-  currentSpend: number;
-  currentPaidSales: number;
-  currentOrganicSales: number;
-  currentClicks: number;
-  currentOrders: number;
-  cpc: number;
-  targetRoas: number;
-  organicLiftMultiplier: number;
-  averageOrderValue: number;
-  conversionRate: number;
-  planningMode: "clicks" | "budget";
-  plannedClicks: number;
-  plannedBudget: number;
-}
-
-export interface AdPotentialPlanRow {
-  clicks: number;
-  impressions: number;
-  budget: number;
+export interface AdPotentialBaseline {
+  spend: number;
   paidSales: number;
   organicSales: number;
-  totalSales: number;
-  roas: number;
-  totalRoas: number;
-  tacos: number;
+  clicks: number;
   orders: number;
+  impressions: number;
+}
+
+export interface AdPotentialDefaults {
+  plannedBudget: number;
+  targetRoas: number;
+  cpc: number;
+  conversionRate: number;
+  averageOrderValue: number;
+  organicLiftPercent: number;
+}
+
+export interface AdPotentialPlan {
+  id: string;
+  name: string;
+  budget: number;
+  targetRoas: number;
+  cpc: number;
+  conversionRate: number;
+  averageOrderValue: number;
+  organicLiftPercent: number;
+}
+
+export interface AdPotentialPlannerState {
+  baseline: AdPotentialBaseline;
+  defaults: AdPotentialDefaults;
+  plans: AdPotentialPlan[];
+  selectedPlanId: string;
+}
+
+export interface AdPotentialBaselineMetrics {
+  baselineTotalSales: number;
+  baselineCpc: number;
+  baselineCvr: number;
+  baselineAov: number;
+  baselinePaidRoas: number;
+  baselineTotalRoas: number;
+  baselineTacos: number;
+  baselineCtr: number;
+}
+
+export type AdPotentialRiskLabel = "Low Risk" | "Moderate Risk" | "Aggressive" | "Unrealistic";
+
+export interface AdPotentialPlanRisk {
+  riskLabel: AdPotentialRiskLabel;
+  warnings: string[];
+  riskScore: number;
+}
+
+export interface CalculatedAdPotentialPlan extends AdPotentialPlan {
+  clicks: number;
+  orders: number;
+  paidSales: number;
+  paidRoas: number;
+  organicLiftSales: number;
+  totalSales: number;
+  tacos: number;
+  targetPaidSales: number;
+  targetGap: number;
+  targetGapPercent: number;
+  riskLabel: AdPotentialRiskLabel;
+  warnings: string[];
+  riskScore: number;
+}
+
+export interface AdPotentialPlanLabels {
+  planId: string;
+  labels: Array<"Best Growth" | "Best Efficiency" | "Best ROAS" | "Most Realistic">;
+}
+
+export interface AdPotentialWhatNeedsToBeTrue {
+  requiredPaidSales: number;
+  requiredOrders: number;
+  requiredCvr: number;
+  requiredCpc: number;
+  requiredAov: number;
 }
 
 export type AppSection = "dashboard" | "clients" | "upload" | "sku-pnl" | "parent-asin" | "ad-potential" | "performance" | "settings";

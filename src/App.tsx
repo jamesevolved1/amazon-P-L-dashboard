@@ -13,13 +13,14 @@ import { SkuDetailDrawer } from "./components/SkuDetailDrawer";
 import { SkuProfitTable } from "./components/SkuProfitTable";
 import { TacosSnapshot } from "./components/TacosSnapshot";
 import { aggregateParentAsinPnl, calculatePortfolio } from "./lib/calculations";
-import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
+import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudAdPotentialState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
 import { downloadCsv, exportExecutiveSummary, exportWorkbook } from "./lib/export";
 import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
-import { loadActiveClientId, loadClients, loadClientSkuData, loadSavedScenarios, saveActiveClientId, saveClients, saveClientSkuData, saveScenarios } from "./lib/storage";
+import { initialAdPotentialState } from "./lib/adPotentialCalculations";
+import { loadActiveClientId, loadAdPotentialStates, loadClients, loadClientSkuData, loadSavedScenarios, saveActiveClientId, saveAdPotentialStates, saveClients, saveClientSkuData, saveScenarios } from "./lib/storage";
 import type { SupabaseSession } from "./lib/supabase";
-import type { AppSection, CalculatedSkuPnl, ClientAccount, ProductSku, ScenarioAssumptions } from "./types/models";
+import type { AdPotentialPlannerState, AppSection, CalculatedSkuPnl, ClientAccount, ProductSku, ScenarioAssumptions } from "./types/models";
 
 export default function App({ session }: { session: SupabaseSession | null }) {
   const [scenario, setScenario] = useState<ScenarioAssumptions>(() => {
@@ -38,6 +39,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   const [clients, setClients] = useState(() => loadClients());
   const [activeClientId, setActiveClientId] = useState(() => loadActiveClientId(loadClients()));
   const [clientSkuData, setClientSkuData] = useState<Record<string, ProductSku[]>>(() => loadClientSkuData());
+  const [adPotentialStates, setAdPotentialStates] = useState<Record<string, AdPotentialPlannerState>>(() => loadAdPotentialStates());
   const [workspaceWarnings, setWorkspaceWarnings] = useState<Record<string, string[]>>({});
   const [cloudStatus, setCloudStatus] = useState<string>("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -55,12 +57,14 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         setClients(state.clients);
         setActiveClientId(state.activeClientId);
         setClientSkuData(state.clientSkuData);
+        setAdPotentialStates(state.adPotentialStates);
         setWorkspaceWarnings(state.workspaceWarnings);
         setWarnings(state.workspaceWarnings[state.activeClientId] ?? []);
         setSaved(state.scenarios);
         saveClients(state.clients);
         saveActiveClientId(state.activeClientId);
         saveClientSkuData(state.clientSkuData);
+        saveAdPotentialStates(state.adPotentialStates);
         saveScenarios(state.scenarios);
         setCloudStatus("Cloud saved");
       })
@@ -74,6 +78,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   }, [userId]);
 
   const skus = clientSkuData[activeClientId] ?? sampleSkus;
+  const activeAdPotentialState = adPotentialStates[activeClientId] ?? initialAdPotentialState;
   const portfolio = useMemo(() => calculatePortfolio(skus, scenario), [skus, scenario]);
   const parentRows = useMemo(() => aggregateParentAsinPnl(portfolio.rows, scenario), [portfolio.rows, scenario]);
   const savedComparisons = useMemo(
@@ -200,8 +205,12 @@ export default function App({ session }: { session: SupabaseSession | null }) {
     delete nextSkuData[clientId];
     setClients(next);
     setClientSkuData(nextSkuData);
+    const nextAdPotentialStates = { ...adPotentialStates };
+    delete nextAdPotentialStates[clientId];
+    setAdPotentialStates(nextAdPotentialStates);
     saveClients(next);
     saveClientSkuData(nextSkuData);
+    saveAdPotentialStates(nextAdPotentialStates);
     if (userId) {
       setCloudStatus("Deleting client...");
       deleteCloudClient(userId, clientId)
@@ -231,6 +240,18 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 
   const renameClient = (clientId: string, name: string) => {
     updateClient(clientId, { name });
+  };
+
+  const updateAdPotentialState = (state: AdPotentialPlannerState) => {
+    const normalizedState = state;
+    const next = { ...adPotentialStates, [activeClientId]: normalizedState };
+    setAdPotentialStates(next);
+    saveAdPotentialStates(next);
+    if (userId && activeClientId) {
+      saveCloudAdPotentialState(userId, activeClientId, normalizedState)
+        .then(() => setCloudStatus("Cloud saved"))
+        .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
+    }
   };
 
   return (
@@ -279,7 +300,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
               className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-warm"
             >
               <Download className="h-4 w-4" />
-              Summary
+              Summary PDF
             </button>
             <button
               onClick={() => downloadCsv(portfolio.rows)}
@@ -315,7 +336,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
               saveClientSkuData(nextSkuData);
               if (userId && activeClientId) {
                 setCloudStatus("Saving workspace...");
-                saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings)
+                saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings, activeAdPotentialState)
                   .then(() => setCloudStatus("Cloud saved"))
                   .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
               }
@@ -371,7 +392,13 @@ export default function App({ session }: { session: SupabaseSession | null }) {
           </>
         ) : null}
 
-        {activeSection === "ad-potential" ? <AdPotential /> : null}
+        {activeSection === "ad-potential" ? (
+          <AdPotential
+            accountBaseline={{ currentSpend: currentAdSpend, totalSales: currentSales, currentTacos }}
+            state={activeAdPotentialState}
+            onStateChange={updateAdPotentialState}
+          />
+        ) : null}
 
         {activeSection === "performance" ? (
           <ProfitCharts rows={portfolio.rows} parentRows={parentRows} />

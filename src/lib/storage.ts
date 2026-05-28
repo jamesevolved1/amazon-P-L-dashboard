@@ -1,9 +1,11 @@
-import type { ClientAccount, ProductSku, ScenarioAssumptions } from "../types/models";
+import { initialAdPotentialState, normalizePlannerState } from "./adPotentialCalculations";
+import type { AdPotentialPlannerState, ClientAccount, ProductSku, ScenarioAssumptions } from "../types/models";
 
 const key = "amazon-sku-profitability-scenarios";
 const clientsKey = "amazon-sku-profitability-clients";
 const activeClientKey = "amazon-sku-profitability-active-client";
 const clientSkuDataKey = "amazon-sku-profitability-client-sku-data";
+const adPotentialKey = "amazon-sku-profitability-ad-potential";
 
 export const defaultClients: ClientAccount[] = [
   { id: "demo-redmond", name: "Demo Account", marketplace: "Amazon US", tacosGoal: 0.09, couponPercent: 0 },
@@ -65,4 +67,30 @@ export function loadClientSkuData(): Record<string, ProductSku[]> {
 
 export function saveClientSkuData(data: Record<string, ProductSku[]>) {
   localStorage.setItem(clientSkuDataKey, JSON.stringify(data));
+}
+
+export function loadAdPotentialStates(): Record<string, AdPotentialPlannerState> {
+  try {
+    const raw = localStorage.getItem(adPotentialKey);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, AdPotentialPlannerState>) : {};
+    return Object.entries(parsed).reduce<Record<string, AdPotentialPlannerState>>((acc, [clientId, state]) => {
+      acc[clientId] = normalizePlannerState(state);
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+export function loadAdPotentialState(clientId: string): AdPotentialPlannerState {
+  return loadAdPotentialStates()[clientId] ?? initialAdPotentialState;
+}
+
+export function saveAdPotentialStates(data: Record<string, AdPotentialPlannerState>) {
+  localStorage.setItem(adPotentialKey, JSON.stringify(data));
+}
+
+export function saveAdPotentialState(clientId: string, state: AdPotentialPlannerState) {
+  const next = { ...loadAdPotentialStates(), [clientId]: normalizePlannerState(state) };
+  saveAdPotentialStates(next);
 }

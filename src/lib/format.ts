@@ -27,3 +27,10 @@ export const signedCurrency = (value: number) => {
 
 export const signedPercent = (value: number) =>
   `${value >= 0 ? "+" : ""}${percent(value)}`;
+
+export const formatCurrency = currency;
+export const formatNumber = number;
+export const formatPercent = (value: number) =>
+  `${((Number.isFinite(value) ? value : 0) * 100).toFixed(Math.abs(value) >= 0.1 ? 0 : 1)}%`;
+export const formatRoas = (value: number) =>
+  `${(Number.isFinite(value) ? value : 0).toFixed(2)}x`;
