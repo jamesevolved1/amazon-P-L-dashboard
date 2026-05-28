@@ -270,4 +270,4 @@ export interface AdPotentialWhatNeedsToBeTrue {
   requiredAov: number;
 }
 
-export type AppSection = "dashboard" | "clients" | "upload" | "sku-pnl" | "parent-asin" | "ad-potential" | "performance" | "settings";
+export type AppSection = "dashboard" | "clients" | "upload" | "sku-pnl" | "parent-asin" | "reporting" | "ad-potential" | "performance" | "settings";

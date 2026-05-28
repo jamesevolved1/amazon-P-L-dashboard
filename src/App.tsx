@@ -6,6 +6,7 @@ import { FileImport } from "./components/FileImport";
 import { KpiCard } from "./components/KpiCard";
 import { ParentAsinProfitTable } from "./components/ParentAsinProfitTable";
 import { ProfitCharts } from "./components/ProfitCharts";
+import { ReportingDashboard } from "./components/ReportingDashboard";
 import { ScenarioComparisonTable } from "./components/ScenarioComparisonTable";
 import { ScenarioControls } from "./components/ScenarioControls";
 import { Sidebar } from "./components/Sidebar";
@@ -141,6 +142,11 @@ export default function App({ session }: { session: SupabaseSession | null }) {
       eyebrow: "Parent Portfolio",
       title: "Parent ASIN P&L",
       description: "Roll child ASINs and SKUs into parent-level profitability, margin, TACOS, and data health.",
+    },
+    reporting: {
+      eyebrow: "Amazon Ads Reporting",
+      title: "Reporting Dashboard",
+      description: "Track spend, sales, ACOS, ROAS, budget pacing, campaign performance, and product-level advertising signals.",
     },
     "ad-potential": {
       eyebrow: "Ad Growth Planning",
@@ -398,6 +404,10 @@ export default function App({ session }: { session: SupabaseSession | null }) {
             state={activeAdPotentialState}
             onStateChange={updateAdPotentialState}
           />
+        ) : null}
+
+        {activeSection === "reporting" ? (
+          <ReportingDashboard />
         ) : null}
 
         {activeSection === "performance" ? (
