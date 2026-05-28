@@ -97,11 +97,12 @@ export function Sidebar({
       </nav>
 
       <div className="mt-auto border-t border-white/10 p-3">
-        <div className={collapsed ? "grid gap-2" : "flex items-center gap-2 rounded-2xl border border-white/10 bg-[#111F27] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"}>
+        <div className={collapsed ? "grid gap-2" : "rounded-2xl border border-white/10 bg-[#101C23] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"}>
+          <div className={collapsed ? "grid gap-2" : "flex items-center gap-2"}>
           <button
             type="button"
             onClick={() => onSectionChange("clients")}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-brand"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/8 text-white ring-1 ring-white/10 transition hover:bg-brand"
             title="Client goals"
           >
             <Users className="h-5 w-5" />
@@ -115,11 +116,17 @@ export function Sidebar({
           <button
             type="button"
             onClick={addClient}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-lg shadow-black/20 ring-1 ring-white/15 transition hover:scale-105 hover:bg-deep"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-sm ring-1 ring-white/15 transition hover:-translate-y-0.5 hover:bg-deep"
             title="Add client"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
           </button>
+          </div>
+          {!collapsed ? (
+            <div className="mt-2 rounded-lg border border-white/8 bg-[#0B151B] px-2.5 py-1.5 text-[11px] font-bold text-white/55">
+              Click client for goals
+            </div>
+          ) : null}
         </div>
       </div>
     </aside>
