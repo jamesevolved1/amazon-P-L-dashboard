@@ -1,4 +1,4 @@
-import { Lock, LogOut } from "lucide-react";
+import { Lock } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase, type SupabaseSession } from "../lib/supabase";
 
@@ -100,15 +100,5 @@ export function AuthGate({ children }: { children: (session: SupabaseSession | n
     );
   }
 
-  return (
-    <>
-      <div className="fixed right-5 top-5 z-[100] flex items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-ink shadow-card">
-        <span className="max-w-[220px] truncate">{session.user.email}</span>
-        <button type="button" className="rounded-full p-1 hover:bg-warm" onClick={() => supabase?.auth.signOut()} aria-label="Sign out">
-          <LogOut className="h-4 w-4" />
-        </button>
-      </div>
-      {children(session)}
-    </>
-  );
+  return <>{children(session)}</>;
 }

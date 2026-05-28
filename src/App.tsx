@@ -1,4 +1,4 @@
-import { CheckCircle2, FileSpreadsheet, LineChart, PackageCheck, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, LineChart, PackageCheck, RefreshCw, Target, Trash2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdPotential } from "./components/AdPotential";
 import { DataQualityPanel } from "./components/DataQualityPanel";
@@ -398,6 +398,20 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                       >
                         {isActive ? "Active" : "Use"}
                       </button>
+                      {clients.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const confirmed = window.prompt(`Type DELETE to remove ${client.name}.`);
+                            if (confirmed === "DELETE") removeClient(client.id);
+                          }}
+                          className="rounded-full border border-red-200 bg-white p-2 text-red-700 transition hover:bg-red-50"
+                          aria-label={`Delete ${client.name}`}
+                          title="Delete client"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : null}
                     </div>
                     <div className="mt-2 text-sm font-semibold text-steel">{clientRows ? `${number(clientRows)} imported SKU rows` : "Using sample data until reports are imported"}</div>
                     <button
