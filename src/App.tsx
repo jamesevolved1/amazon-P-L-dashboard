@@ -14,14 +14,15 @@ import { SkuDetailDrawer } from "./components/SkuDetailDrawer";
 import { SkuProfitTable } from "./components/SkuProfitTable";
 import { TacosSnapshot } from "./components/TacosSnapshot";
 import { aggregateParentAsinPnl, calculatePortfolio } from "./lib/calculations";
-import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudAdPotentialState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
+import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudAdPotentialState, saveCloudReportingState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
 import { downloadCsv, exportExecutiveSummary, exportWorkbook } from "./lib/export";
 import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
 import { initialAdPotentialState } from "./lib/adPotentialCalculations";
-import { loadActiveClientId, loadAdPotentialStates, loadClients, loadClientSkuData, loadSavedScenarios, saveActiveClientId, saveAdPotentialStates, saveClients, saveClientSkuData, saveScenarios } from "./lib/storage";
+import { emptyReportingSourceConfig, emptyReportingState, refreshReportingFromSheets } from "./lib/reportingData";
+import { loadActiveClientId, loadAdPotentialStates, loadClients, loadClientSkuData, loadReportingStates, loadSavedScenarios, saveActiveClientId, saveAdPotentialStates, saveClients, saveClientSkuData, saveReportingStates, saveScenarios } from "./lib/storage";
 import type { SupabaseSession } from "./lib/supabase";
-import type { AdPotentialPlannerState, AppSection, CalculatedSkuPnl, ClientAccount, ProductSku, ScenarioAssumptions } from "./types/models";
+import type { AdPotentialPlannerState, AppSection, CalculatedSkuPnl, ClientAccount, ProductSku, ReportingState, ScenarioAssumptions } from "./types/models";
 
 export default function App({ session }: { session: SupabaseSession | null }) {
   const [scenario, setScenario] = useState<ScenarioAssumptions>(() => {
@@ -41,6 +42,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   const [activeClientId, setActiveClientId] = useState(() => loadActiveClientId(loadClients()));
   const [clientSkuData, setClientSkuData] = useState<Record<string, ProductSku[]>>(() => loadClientSkuData());
   const [adPotentialStates, setAdPotentialStates] = useState<Record<string, AdPotentialPlannerState>>(() => loadAdPotentialStates());
+  const [reportingStates, setReportingStates] = useState<Record<string, ReportingState>>(() => loadReportingStates());
   const [workspaceWarnings, setWorkspaceWarnings] = useState<Record<string, string[]>>({});
   const [cloudStatus, setCloudStatus] = useState<string>("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -59,6 +61,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         setActiveClientId(state.activeClientId);
         setClientSkuData(state.clientSkuData);
         setAdPotentialStates(state.adPotentialStates);
+        setReportingStates(state.reportingStates);
         setWorkspaceWarnings(state.workspaceWarnings);
         setWarnings(state.workspaceWarnings[state.activeClientId] ?? []);
         setSaved(state.scenarios);
@@ -66,6 +69,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         saveActiveClientId(state.activeClientId);
         saveClientSkuData(state.clientSkuData);
         saveAdPotentialStates(state.adPotentialStates);
+        saveReportingStates(state.reportingStates);
         saveScenarios(state.scenarios);
         setCloudStatus("Cloud saved");
       })
@@ -80,6 +84,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 
   const skus = clientSkuData[activeClientId] ?? sampleSkus;
   const activeAdPotentialState = adPotentialStates[activeClientId] ?? initialAdPotentialState;
+  const activeReportingState = reportingStates[activeClientId] ?? emptyReportingState;
   const portfolio = useMemo(() => calculatePortfolio(skus, scenario), [skus, scenario]);
   const parentRows = useMemo(() => aggregateParentAsinPnl(portfolio.rows, scenario), [portfolio.rows, scenario]);
   const savedComparisons = useMemo(
@@ -214,9 +219,13 @@ export default function App({ session }: { session: SupabaseSession | null }) {
     const nextAdPotentialStates = { ...adPotentialStates };
     delete nextAdPotentialStates[clientId];
     setAdPotentialStates(nextAdPotentialStates);
+    const nextReportingStates = { ...reportingStates };
+    delete nextReportingStates[clientId];
+    setReportingStates(nextReportingStates);
     saveClients(next);
     saveClientSkuData(nextSkuData);
     saveAdPotentialStates(nextAdPotentialStates);
+    saveReportingStates(nextReportingStates);
     if (userId) {
       setCloudStatus("Deleting client...");
       deleteCloudClient(userId, clientId)
@@ -255,6 +264,17 @@ export default function App({ session }: { session: SupabaseSession | null }) {
     saveAdPotentialStates(next);
     if (userId && activeClientId) {
       saveCloudAdPotentialState(userId, activeClientId, normalizedState)
+        .then(() => setCloudStatus("Cloud saved"))
+        .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
+    }
+  };
+
+  const updateReportingState = (state: ReportingState) => {
+    const next = { ...reportingStates, [activeClientId]: state };
+    setReportingStates(next);
+    saveReportingStates(next);
+    if (userId && activeClientId) {
+      saveCloudReportingState(userId, activeClientId, state)
         .then(() => setCloudStatus("Cloud saved"))
         .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
     }
@@ -407,7 +427,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         ) : null}
 
         {activeSection === "reporting" ? (
-          <ReportingDashboard />
+          <ReportingDashboard state={activeReportingState} onStateChange={updateReportingState} />
         ) : null}
 
         {activeSection === "performance" ? (
@@ -417,6 +437,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         {activeSection === "settings" ? (
           <div className="grid gap-5">
             <ScenarioControls scenario={scenario} onChange={setScenario} onSave={saveActiveScenario} />
+            <ReportingSourcesSettings state={activeReportingState} onStateChange={updateReportingState} />
             <DataQualityPanel issues={portfolio.issues} warnings={warnings} />
           </div>
         ) : null}
@@ -506,6 +527,74 @@ export default function App({ session }: { session: SupabaseSession | null }) {
       <SkuDetailDrawer row={selected} onClose={() => setSelected(null)} />
       </div>
     </div>
+  );
+}
+
+function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingState; onStateChange: (state: ReportingState) => void }) {
+  const [draft, setDraft] = useState({ ...emptyReportingSourceConfig, ...state.sourceConfig });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const fields: Array<{ key: keyof typeof draft; label: string }> = [
+    { key: "campaignCsvUrl", label: "Campaign report tab" },
+    { key: "productCsvUrl", label: "Advertised product tab" },
+    { key: "searchTermCsvUrl", label: "Search term tab" },
+    { key: "dailyCsvUrl", label: "Daily trend tab" },
+    { key: "businessCsvUrl", label: "Business report tab" },
+  ];
+
+  const refresh = async () => {
+    setIsRefreshing(true);
+    try {
+      onStateChange(await refreshReportingFromSheets(draft));
+    } catch (error) {
+      onStateChange({ ...state, sourceConfig: draft, errors: [error instanceof Error ? error.message : "Could not refresh reporting data."] });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Client Data Sources</div>
+          <h2 className="mt-2 text-xl font-extrabold text-ink">Google Sheets reporting source</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
+            Save the Google Sheet tab links for this client once, then refresh the Reporting Dashboard whenever you update the sheet.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onStateChange({ ...state, sourceConfig: draft })}
+            className="rounded-full border border-line bg-white px-4 py-2 text-sm font-extrabold uppercase tracking-wide hover:bg-warm"
+          >
+            Save Links
+          </button>
+          <button
+            onClick={refresh}
+            disabled={isRefreshing}
+            className="rounded-full bg-brand px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-deep disabled:opacity-60"
+          >
+            {isRefreshing ? "Refreshing..." : "Refresh Data"}
+          </button>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {fields.map((field) => (
+          <label key={field.key} className="grid gap-2">
+            <span className="text-sm font-extrabold text-ink">{field.label}</span>
+            <input
+              value={draft[field.key]}
+              onChange={(event) => setDraft({ ...draft, [field.key]: event.target.value })}
+              placeholder="Paste the Google Sheet tab URL"
+              className="rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 rounded-lg border border-line bg-warm/50 p-3 text-sm text-steel">
+        Last refreshed: <strong className="text-ink">{state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Not refreshed yet"}</strong>
+      </div>
+    </section>
   );
 }
 

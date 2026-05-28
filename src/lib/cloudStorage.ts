@@ -1,8 +1,9 @@
 import { defaultScenario } from "./mockData";
 import { defaultClients } from "./storage";
 import { normalizePlannerState } from "./adPotentialCalculations";
+import { normalizeReportingState } from "./reportingData";
 import { supabase } from "./supabase";
-import type { AdPotentialPlannerState, ClientAccount, ProductSku, ScenarioAssumptions } from "../types/models";
+import type { AdPotentialPlannerState, ClientAccount, ProductSku, ReportingState, ScenarioAssumptions } from "../types/models";
 
 export interface CloudState {
   clients: ClientAccount[];
@@ -10,6 +11,7 @@ export interface CloudState {
   clientSkuData: Record<string, ProductSku[]>;
   workspaceWarnings: Record<string, string[]>;
   adPotentialStates: Record<string, AdPotentialPlannerState>;
+  reportingStates: Record<string, ReportingState>;
   scenarios: ScenarioAssumptions[];
 }
 
@@ -26,6 +28,7 @@ interface WorkspaceRow {
   sku_data: ProductSku[] | null;
   import_warnings: string[] | null;
   ad_potential_state: AdPotentialPlannerState | null;
+  reporting_state: ReportingState | null;
 }
 
 interface ScenarioRow {
@@ -65,7 +68,7 @@ export async function loadCloudState(userId: string): Promise<CloudState> {
 
   const clientIds = clients.map((item) => item.id);
   const [{ data: workspaceRows, error: workspaceError }, { data: scenarioRows, error: scenariosError }] = await Promise.all([
-    client.from("client_workspaces").select("client_id,sku_data,import_warnings,ad_potential_state").in("client_id", clientIds),
+    client.from("client_workspaces").select("client_id,sku_data,import_warnings,ad_potential_state,reporting_state").in("client_id", clientIds),
     client.from("scenarios").select("assumptions").in("client_id", clientIds).order("created_at", { ascending: true }),
   ]);
 
@@ -84,6 +87,10 @@ export async function loadCloudState(userId: string): Promise<CloudState> {
     if (row.ad_potential_state) acc[row.client_id] = normalizePlannerState(row.ad_potential_state);
     return acc;
   }, {});
+  const reportingStates = ((workspaceRows as WorkspaceRow[] | null) ?? []).reduce<Record<string, ReportingState>>((acc, row) => {
+    if (row.reporting_state) acc[row.client_id] = normalizeReportingState(row.reporting_state);
+    return acc;
+  }, {});
 
   return {
     clients,
@@ -91,6 +98,7 @@ export async function loadCloudState(userId: string): Promise<CloudState> {
     clientSkuData,
     workspaceWarnings,
     adPotentialStates,
+    reportingStates,
     scenarios: ((scenarioRows as ScenarioRow[] | null) ?? []).map((row) => ({ ...defaultScenario, ...row.assumptions })),
   };
 }
@@ -152,6 +160,20 @@ export async function saveCloudAdPotentialState(userId: string, clientId: string
       user_id: userId,
       client_id: clientId,
       ad_potential_state: normalizePlannerState(state),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "client_id" },
+  );
+  if (error) throw error;
+}
+
+export async function saveCloudReportingState(userId: string, clientId: string, state: ReportingState) {
+  const client = requireSupabase();
+  const { error } = await client.from("client_workspaces").upsert(
+    {
+      user_id: userId,
+      client_id: clientId,
+      reporting_state: normalizeReportingState(state),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "client_id" },

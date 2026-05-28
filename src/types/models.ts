@@ -270,4 +270,65 @@ export interface AdPotentialWhatNeedsToBeTrue {
   requiredAov: number;
 }
 
+export interface ReportingSourceConfig {
+  campaignCsvUrl: string;
+  productCsvUrl: string;
+  searchTermCsvUrl: string;
+  dailyCsvUrl: string;
+  businessCsvUrl: string;
+}
+
+export interface ReportingCampaignRow {
+  campaign: string;
+  type: string;
+  spend: number;
+  sales: number;
+  impressions: number;
+  clicks: number;
+  orders: number;
+  budget: number;
+  status: string;
+}
+
+export interface ReportingProductRow {
+  product: string;
+  asin: string;
+  sku: string;
+  spend: number;
+  adSales: number;
+  totalSales: number;
+  impressions: number;
+  clicks: number;
+  orders: number;
+}
+
+export interface ReportingSearchTermRow {
+  searchTerm: string;
+  campaign: string;
+  spend: number;
+  sales: number;
+  impressions: number;
+  clicks: number;
+  orders: number;
+}
+
+export interface ReportingDailyRow {
+  day: string;
+  spend: number;
+  sales: number;
+  impressions: number;
+  clicks: number;
+  orders: number;
+}
+
+export interface ReportingState {
+  sourceConfig: ReportingSourceConfig;
+  lastRefreshedAt: string | null;
+  campaigns: ReportingCampaignRow[];
+  products: ReportingProductRow[];
+  searchTerms: ReportingSearchTermRow[];
+  daily: ReportingDailyRow[];
+  errors: string[];
+}
+
 export type AppSection = "dashboard" | "clients" | "upload" | "sku-pnl" | "parent-asin" | "reporting" | "ad-potential" | "performance" | "settings";

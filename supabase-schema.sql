@@ -17,6 +17,7 @@ create table if not exists client_workspaces (
   import_warnings jsonb not null default '[]',
   data_quality_issues jsonb not null default '[]',
   ad_potential_state jsonb not null default '{}',
+  reporting_state jsonb not null default '{}',
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique(client_id)
@@ -24,6 +25,9 @@ create table if not exists client_workspaces (
 
 alter table client_workspaces
 add column if not exists ad_potential_state jsonb not null default '{}';
+
+alter table client_workspaces
+add column if not exists reporting_state jsonb not null default '{}';
 
 create table if not exists scenarios (
   id uuid primary key default gen_random_uuid(),
