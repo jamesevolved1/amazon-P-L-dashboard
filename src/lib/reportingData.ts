@@ -9,6 +9,12 @@ import type {
 } from "../types/models";
 
 export const emptyReportingSourceConfig: ReportingSourceConfig = {
+  masterSheetUrl: "",
+  campaignTabName: "Campaign Report",
+  productTabName: "Advertised Product Report",
+  searchTermTabName: "Search Term Report",
+  dailyTabName: "Daily Trend",
+  businessTabName: "Business Report",
   campaignCsvUrl: "",
   productCsvUrl: "",
   searchTermCsvUrl: "",
@@ -89,6 +95,20 @@ function normalizeGoogleSheetUrl(url: string) {
     }
   }
   return trimmed;
+}
+
+function googleSheetId(url: string) {
+  return url.trim().match(/\/spreadsheets\/d\/([^/]+)/)?.[1] ?? "";
+}
+
+function tabCsvUrl(masterSheetUrl: string, tabName: string) {
+  const id = googleSheetId(masterSheetUrl);
+  if (!id || !tabName.trim()) return "";
+  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName.trim())}`;
+}
+
+function sourceUrl(config: ReportingSourceConfig, key: keyof Pick<ReportingSourceConfig, "campaignCsvUrl" | "productCsvUrl" | "searchTermCsvUrl" | "dailyCsvUrl" | "businessCsvUrl">, tabName: string) {
+  return config.masterSheetUrl.trim() ? tabCsvUrl(config.masterSheetUrl, tabName) : config[key];
 }
 
 async function fetchRows(url: string): Promise<RawRow[]> {
@@ -184,11 +204,11 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
   const errors: string[] = [];
   const [campaignRows, productRows, searchTermRows, dailyRows, businessRows] = await Promise.all(
     ([
-      ["Campaign report", config.campaignCsvUrl],
-      ["Advertised product report", config.productCsvUrl],
-      ["Search term report", config.searchTermCsvUrl],
-      ["Daily trend report", config.dailyCsvUrl],
-      ["Business report", config.businessCsvUrl],
+      ["Campaign report", sourceUrl(config, "campaignCsvUrl", config.campaignTabName)],
+      ["Advertised product report", sourceUrl(config, "productCsvUrl", config.productTabName)],
+      ["Search term report", sourceUrl(config, "searchTermCsvUrl", config.searchTermTabName)],
+      ["Daily trend report", sourceUrl(config, "dailyCsvUrl", config.dailyTabName)],
+      ["Business report", sourceUrl(config, "businessCsvUrl", config.businessTabName)],
     ] as const).map(async ([label, url]) => {
       try {
         return await fetchRows(url);

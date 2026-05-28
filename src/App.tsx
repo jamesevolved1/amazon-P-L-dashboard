@@ -1,4 +1,4 @@
-import { Download, FileSpreadsheet, LineChart, PackageCheck, Target, TrendingUp } from "lucide-react";
+import { CheckCircle2, Download, FileSpreadsheet, LineChart, PackageCheck, RefreshCw, Target, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdPotential } from "./components/AdPotential";
 import { DataQualityPanel } from "./components/DataQualityPanel";
@@ -533,19 +533,24 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingState; onStateChange: (state: ReportingState) => void }) {
   const [draft, setDraft] = useState({ ...emptyReportingSourceConfig, ...state.sourceConfig });
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const fields: Array<{ key: keyof typeof draft; label: string }> = [
-    { key: "campaignCsvUrl", label: "Campaign report tab" },
-    { key: "productCsvUrl", label: "Advertised product tab" },
-    { key: "searchTermCsvUrl", label: "Search term tab" },
-    { key: "dailyCsvUrl", label: "Daily trend tab" },
-    { key: "businessCsvUrl", label: "Business report tab" },
+  const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const tabFields: Array<{ key: keyof typeof draft; label: string }> = [
+    { key: "campaignTabName", label: "Campaign report tab" },
+    { key: "productTabName", label: "Advertised product tab" },
+    { key: "searchTermTabName", label: "Search term tab" },
+    { key: "dailyTabName", label: "Daily trend tab" },
+    { key: "businessTabName", label: "Business report tab" },
   ];
 
   const refresh = async () => {
     setIsRefreshing(true);
+    setSubmitState("loading");
     try {
       onStateChange(await refreshReportingFromSheets(draft));
+      setSubmitState("success");
+      window.setTimeout(() => setSubmitState("idle"), 1800);
     } catch (error) {
+      setSubmitState("error");
       onStateChange({ ...state, sourceConfig: draft, errors: [error instanceof Error ? error.message : "Could not refresh reporting data."] });
     } finally {
       setIsRefreshing(false);
@@ -553,46 +558,75 @@ function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingSt
   };
 
   return (
-    <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+    <section className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+      <div className={`h-1.5 transition-all duration-700 ${submitState === "loading" ? "bg-brand" : submitState === "success" ? "bg-emerald-500" : submitState === "error" ? "bg-danger" : "bg-warm"}`} />
+      <div className="p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Client Data Sources</div>
-          <h2 className="mt-2 text-xl font-extrabold text-ink">Google Sheets reporting source</h2>
+          <h2 className="mt-2 text-xl font-extrabold text-ink">One master Google Sheet</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
-            Save the Google Sheet tab links for this client once, then refresh the Reporting Dashboard whenever you update the sheet.
+            Paste one spreadsheet link for this client, confirm the tab names, then refresh the Reporting Dashboard whenever you update the sheet.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => onStateChange({ ...state, sourceConfig: draft })}
+            onClick={() => {
+              onStateChange({ ...state, sourceConfig: draft });
+              setSubmitState("success");
+              window.setTimeout(() => setSubmitState("idle"), 1400);
+            }}
             className="rounded-full border border-line bg-white px-4 py-2 text-sm font-extrabold uppercase tracking-wide hover:bg-warm"
           >
-            Save Links
+            Save Source
           </button>
           <button
             onClick={refresh}
             disabled={isRefreshing}
-            className="rounded-full bg-brand px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-deep disabled:opacity-60"
+            className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg transition-all duration-300 disabled:opacity-70 ${
+              submitState === "success" ? "scale-[1.03] bg-emerald-600 shadow-emerald-200" : "bg-brand shadow-brand/20 hover:-translate-y-0.5 hover:bg-deep"
+            }`}
           >
-            {isRefreshing ? "Refreshing..." : "Refresh Data"}
+            {submitState === "success" ? <CheckCircle2 className="h-4 w-4" /> : <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />}
+            {submitState === "success" ? "Dashboard Updated" : isRefreshing ? "Building..." : "Submit & Build"}
           </button>
         </div>
       </div>
-      <div className="mt-5 grid gap-3 lg:grid-cols-2">
-        {fields.map((field) => (
+      <label className="mt-5 grid gap-2 rounded-lg border border-line bg-warm/40 p-4">
+        <span className="text-sm font-extrabold text-ink">Master Google Sheet link</span>
+        <input
+          value={draft.masterSheetUrl}
+          onChange={(event) => setDraft({ ...draft, masterSheetUrl: event.target.value })}
+          placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+          className="rounded-md border border-line bg-white px-3 py-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+        />
+        <span className="text-xs leading-5 text-steel">Use one workbook per client. The app reads the tabs below from this sheet.</span>
+      </label>
+      <div className="mt-5 grid gap-3 lg:grid-cols-5">
+        {tabFields.map((field) => (
           <label key={field.key} className="grid gap-2">
             <span className="text-sm font-extrabold text-ink">{field.label}</span>
             <input
               value={draft[field.key]}
               onChange={(event) => setDraft({ ...draft, [field.key]: event.target.value })}
-              placeholder="Paste the Google Sheet tab URL"
+              placeholder="Tab name"
               className="rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </label>
         ))}
       </div>
-      <div className="mt-4 rounded-lg border border-line bg-warm/50 p-3 text-sm text-steel">
+      <div className={`mt-5 rounded-lg border p-4 text-sm transition-all duration-500 ${
+        submitState === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : submitState === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-line bg-warm/50 text-steel"
+      }`}>
+        <div className="flex items-center gap-2 font-extrabold">
+          {submitState === "success" ? <CheckCircle2 className="h-5 w-5" /> : <FileSpreadsheet className="h-5 w-5" />}
+          {submitState === "success" ? "Sheet accepted. Reporting dashboard rebuilt." : "Ready for one-sheet reporting."}
+        </div>
+        <div className="mt-1">
         Last refreshed: <strong className="text-ink">{state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Not refreshed yet"}</strong>
+        </div>
+        {state.errors.length ? <div className="mt-2 font-semibold">{state.errors.join(" ")}</div> : null}
+      </div>
       </div>
     </section>
   );

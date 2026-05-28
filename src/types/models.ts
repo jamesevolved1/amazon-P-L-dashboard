@@ -271,6 +271,12 @@ export interface AdPotentialWhatNeedsToBeTrue {
 }
 
 export interface ReportingSourceConfig {
+  masterSheetUrl: string;
+  campaignTabName: string;
+  productTabName: string;
+  searchTermTabName: string;
+  dailyTabName: string;
+  businessTabName: string;
   campaignCsvUrl: string;
   productCsvUrl: string;
   searchTermCsvUrl: string;

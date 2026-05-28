@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import { currency, number, percent } from "../lib/format";
 import { emptyReportingSourceConfig, refreshReportingFromSheets } from "../lib/reportingData";
-import type { ReportingCampaignRow, ReportingProductRow, ReportingSourceConfig, ReportingState } from "../types/models";
+import type { ReportingCampaignRow, ReportingProductRow, ReportingState } from "../types/models";
 
 const dailyTrend = [
   { day: "May 15", spend: 1880, sales: 6920, impressions: 26096, clicks: 3775 },
@@ -111,9 +111,7 @@ const requirements = [
 ];
 
 export function ReportingDashboard({ state, onStateChange }: { state: ReportingState; onStateChange: (state: ReportingState) => void }) {
-  const [sourceDraft, setSourceDraft] = useState<ReportingSourceConfig>({ ...emptyReportingSourceConfig, ...state.sourceConfig });
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sourceOpen, setSourceOpen] = useState(!state.lastRefreshedAt);
   const rows = useMemo(() => {
     const hasImportedData = state.campaigns.length || state.products.length || state.daily.length;
     return hasImportedData ? state : sampleState;
@@ -143,11 +141,10 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const refreshSheets = async () => {
     setIsRefreshing(true);
     try {
-      const refreshed = await refreshReportingFromSheets(sourceDraft);
+      const refreshed = await refreshReportingFromSheets(state.sourceConfig);
       onStateChange(refreshed);
-      setSourceOpen(false);
     } catch (error) {
-      onStateChange({ ...state, sourceConfig: sourceDraft, errors: [error instanceof Error ? error.message : "Could not refresh reporting data."] });
+      onStateChange({ ...state, errors: [error instanceof Error ? error.message : "Could not refresh reporting data."] });
     } finally {
       setIsRefreshing(false);
     }
@@ -163,7 +160,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               <h2 className="mt-2 text-2xl font-extrabold">Reporting Dashboard</h2>
               <p className="mt-1 max-w-3xl text-sm text-white/75">Campaign, product, search-term, and budget-pacing views for client reporting.</p>
               <div className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-extrabold text-white/80">
-                {hasImportedData ? `Last refreshed ${refreshedLabel}` : "Paste sheet links below to replace the sample dashboard"}
+                {hasImportedData ? `Last refreshed ${refreshedLabel}` : "Set up this client's sheet in Settings to replace the sample dashboard"}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -180,11 +177,12 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
                 Export
               </button>
               <button
-                onClick={() => setSourceOpen((value) => !value)}
-                className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-extrabold text-[#102A3A] hover:bg-white/90"
+                onClick={refreshSheets}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-extrabold text-[#102A3A] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <FileSpreadsheet className="h-4 w-4" />
-                Sheet Source
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                {isRefreshing ? "Refreshing" : "Refresh Data"}
               </button>
             </div>
           </div>
@@ -199,17 +197,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           <ReportMetric label="CPC" value={`$${cpc.toFixed(2)}`} delta="+6.6%" tone="neutral" />
         </div>
       </div>
-
-      {sourceOpen ? (
-        <SheetSourcePanel
-          draft={sourceDraft}
-          errors={state.errors}
-          isRefreshing={isRefreshing}
-          onChange={setSourceDraft}
-          onSave={() => onStateChange({ ...state, sourceConfig: sourceDraft })}
-          onRefresh={refreshSheets}
-        />
-      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
         <div className="grid gap-5">
@@ -300,77 +287,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         <BudgetPacing campaigns={campaignData} />
       </div>
     </section>
-  );
-}
-
-function SheetSourcePanel({
-  draft,
-  errors,
-  isRefreshing,
-  onChange,
-  onSave,
-  onRefresh,
-}: {
-  draft: ReportingSourceConfig;
-  errors: string[];
-  isRefreshing: boolean;
-  onChange: (draft: ReportingSourceConfig) => void;
-  onSave: () => void;
-  onRefresh: () => void;
-}) {
-  const fields: Array<{ key: keyof ReportingSourceConfig; label: string; helper: string }> = [
-    { key: "campaignCsvUrl", label: "Campaign report CSV link", helper: "Campaign, type, spend, sales, impressions, clicks, orders, budget." },
-    { key: "productCsvUrl", label: "Advertised product CSV link", helper: "Product title, SKU, ASIN, spend, ad sales, impressions, clicks, orders." },
-    { key: "searchTermCsvUrl", label: "Search term CSV link", helper: "Search term, campaign, spend, sales, impressions, clicks, orders." },
-    { key: "dailyCsvUrl", label: "Daily trend CSV link", helper: "Date, spend, sales, impressions, clicks, orders." },
-    { key: "businessCsvUrl", label: "Business report CSV link", helper: "Child ASIN and total ordered product sales for TACOS/product context." },
-  ];
-
-  return (
-    <div className="rounded-lg border border-line bg-white p-5 shadow-card">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Spreadsheet Route</div>
-          <h3 className="mt-2 text-xl font-extrabold text-ink">Connect reporting sheets</h3>
-          <p className="mt-1 max-w-4xl text-sm leading-6 text-steel">
-            Paste Google Sheet tab links or direct CSV links. For Google Sheets, open the exact tab, copy the URL with its gid, and the app converts it to a CSV refresh link.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={onSave} className="rounded-full border border-line bg-white px-4 py-2 text-sm font-extrabold uppercase tracking-wide hover:bg-warm">Save Links</button>
-          <button
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-deep disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-            {isRefreshing ? "Refreshing" : "Refresh Data"}
-          </button>
-        </div>
-      </div>
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        {fields.map((field) => (
-          <label key={field.key} className="grid gap-2 rounded-lg border border-line bg-warm/30 p-3">
-            <span className="text-sm font-extrabold text-ink">{field.label}</span>
-            <input
-              value={draft[field.key]}
-              onChange={(event) => onChange({ ...draft, [field.key]: event.target.value })}
-              placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=..."
-              className="rounded-md border border-line bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
-            />
-            <span className="text-xs leading-5 text-steel">{field.helper}</span>
-          </label>
-        ))}
-      </div>
-      {errors.length ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-          {errors.map((error) => <div key={error}>{error}</div>)}
-        </div>
-      ) : null}
-      <div className="mt-4 rounded-lg border border-line bg-white p-3 text-xs leading-5 text-steel">
-        Best sheet tabs: <strong>Campaigns</strong>, <strong>Advertised Products</strong>, <strong>Search Terms</strong>, <strong>Daily Trend</strong>, and <strong>Business Report</strong>. Keep headers recognizable; the app accepts names like Spend/Cost, Sales/Attributed Sales, Campaign/Campaign Name, and Child ASIN/Advertised ASIN.
-      </div>
-    </div>
   );
 }
 
