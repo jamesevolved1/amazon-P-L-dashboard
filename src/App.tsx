@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FileSpreadsheet, LineChart, PackageCheck, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, LineChart, PackageCheck, RefreshCw, Target, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdPotential } from "./components/AdPotential";
 import { DataQualityPanel } from "./components/DataQualityPanel";
@@ -15,7 +15,6 @@ import { SkuProfitTable } from "./components/SkuProfitTable";
 import { TacosSnapshot } from "./components/TacosSnapshot";
 import { aggregateParentAsinPnl, calculatePortfolio } from "./lib/calculations";
 import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudAdPotentialState, saveCloudReportingState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
-import { downloadCsv, exportExecutiveSummary, exportWorkbook } from "./lib/export";
 import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
 import { initialAdPotentialState } from "./lib/adPotentialCalculations";
@@ -47,7 +46,8 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   const [cloudStatus, setCloudStatus] = useState<string>("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [scenarioControlsExpanded, setScenarioControlsExpanded] = useState(false);
-  const [activeSection, setActiveSection] = useState<AppSection>("dashboard");
+  const [activeSection, setActiveSection] = useState<AppSection>("reporting");
+  const [clientGoalsOpen, setClientGoalsOpen] = useState<Record<string, boolean>>({});
   const userId = session?.user.id ?? null;
 
   useEffect(() => {
@@ -122,55 +122,6 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   const currentProfit = portfolio.rows.reduce((sum, row) => sum + row.currentProfit, 0);
   const currentTacos = currentSales ? currentAdSpend / currentSales : 0;
   const currentProfitMargin = currentSales ? currentProfit / currentSales : 0;
-  const sectionMeta: Record<AppSection, { title: string; eyebrow: string; description: string }> = {
-    dashboard: {
-      eyebrow: "Amazon SKU Profitability Modeler",
-      title: "Per-SKU P&L and Scenario Planning Dashboard",
-      description: "Model coupons, TACOS goals, ad spend, price, COGS, Amazon fees, and shipping costs without wrestling the spreadsheet.",
-    },
-    clients: {
-      eyebrow: "Client Workspace",
-      title: "Client Account Management",
-      description: "Add, remove, and switch between client workspaces from the sidebar.",
-    },
-    upload: {
-      eyebrow: "Source Reports",
-      title: "Upload Reports",
-      description: "Bring in the source reports that power the SKU profitability model.",
-    },
-    "sku-pnl": {
-      eyebrow: "SKU Detail",
-      title: "SKU P&L Table",
-      description: "Review unit economics, SKU-level profitability, break-even TACOS, and quick overrides.",
-    },
-    "parent-asin": {
-      eyebrow: "Parent Portfolio",
-      title: "Parent ASIN P&L",
-      description: "Roll child ASINs and SKUs into parent-level profitability, margin, TACOS, and data health.",
-    },
-    reporting: {
-      eyebrow: "Amazon Ads Reporting",
-      title: "Reporting Dashboard",
-      description: "Track spend, sales, ACOS, ROAS, budget pacing, campaign performance, and product-level advertising signals.",
-    },
-    "ad-potential": {
-      eyebrow: "Ad Growth Planning",
-      title: "Ad Potential",
-      description: "Use ROAS, CPC, conversion, and organic lift assumptions to model paid media upside.",
-    },
-    performance: {
-      eyebrow: "Performance Review",
-      title: "Profitability Charts",
-      description: "Use the charts to spot scale candidates, weak margins, and scenario movement.",
-    },
-    settings: {
-      eyebrow: "Settings",
-      title: "Scenario Settings",
-      description: "Tune the global assumptions that drive the scenario model.",
-    },
-  };
-  const currentSection = sectionMeta[activeSection];
-
   const applyClientGoalsToScenario = (client: ClientAccount, baseScenario: ScenarioAssumptions): ScenarioAssumptions => ({
     ...baseScenario,
     globalTacosGoal: client.tacosGoal ?? baseScenario.globalTacosGoal,
@@ -295,58 +246,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
         onRenameClient={renameClient}
       />
       <div className={`min-h-screen transition-[padding] duration-200 ${sidebarCollapsed ? "pl-[76px]" : "pl-[284px]"}`}>
-      <header className="border-b border-line bg-white">
-        <div className="mx-auto flex max-w-[1720px] flex-col gap-5 px-6 py-6 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.18em] text-brand">
-              <FileSpreadsheet className="h-4 w-4" />
-              {currentSection.eyebrow}
-            </div>
-            <h1 className="mt-3 max-w-5xl text-3xl font-extrabold leading-tight tracking-tight text-ink lg:text-4xl">{currentSection.title}</h1>
-            <p className="mt-2 max-w-4xl text-sm font-medium leading-6 text-steel">
-              {currentSection.description}
-            </p>
-            <ClientQuickSwitch
-              clients={clients}
-              activeClientId={activeClientId}
-              scenario={scenario}
-              onSelectClient={selectClient}
-              onScenarioChange={setScenario}
-              onUpdateActiveClientGoals={(patch) => updateClient(activeClientId, patch)}
-            />
-            {session ? (
-              <div className="mt-3 inline-flex rounded-full border border-line bg-white px-3 py-1.5 text-xs font-bold text-steel shadow-sm">
-                {cloudStatus || "Cloud sync ready"}
-              </div>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => exportExecutiveSummary(portfolio.rows, parentRows, summary, portfolio.issues)}
-              className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-warm"
-            >
-              <Download className="h-4 w-4" />
-              Summary PDF
-            </button>
-            <button
-              onClick={() => downloadCsv(portfolio.rows)}
-              className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-warm"
-            >
-              <Download className="h-4 w-4" />
-              CSV
-            </button>
-            <button
-              onClick={() => exportWorkbook(portfolio.rows, savedComparisons.map((item) => ({ name: item.scenario.name, summary: item.summary })), portfolio.issues)}
-              className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-deep"
-            >
-              <Download className="h-4 w-4" />
-              Export XLSX
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto grid max-w-[1720px] gap-5 px-6 py-6">
+      <main className="mx-auto grid max-w-[1720px] gap-5 px-6 py-4">
         {activeSection === "upload" ? (
           <FileImport
             onLoaded={(loadedSkus, importWarnings) => {
@@ -372,6 +272,13 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 
         {activeSection === "dashboard" ? (
           <>
+            <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Amazon Profit Ops</div>
+              <h1 className="mt-2 text-2xl font-extrabold text-ink">P&L Dashboard</h1>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-steel">
+                SKU-level profitability, scenario controls, current account TACOS, and break-even ad room in one working view.
+              </p>
+            </section>
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <KpiCard label="Total Sales" value={currency(summary.totalSales)} helper={`${number(summary.totalUnitsSold)} units`} icon={<TrendingUp className="h-4 w-4" />} />
               <KpiCard label="Current Ad Spend" value={currency(currentAdSpend)} helper="Actual paid media spend" icon={<Target className="h-4 w-4" />} />
@@ -399,10 +306,6 @@ export default function App({ session }: { session: SupabaseSession | null }) {
               </>
             )}
           </>
-        ) : null}
-
-        {activeSection === "sku-pnl" ? (
-          <SkuProfitTable rows={portfolio.rows} scenario={scenario} onScenarioChange={setScenario} onSelectSku={setSelected} />
         ) : null}
 
         {activeSection === "parent-asin" ? (
@@ -436,9 +339,18 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 
         {activeSection === "settings" ? (
           <div className="grid gap-5">
-            <ScenarioControls scenario={scenario} onChange={setScenario} onSave={saveActiveScenario} />
-            <ReportingSourcesSettings state={activeReportingState} onStateChange={updateReportingState} />
-            <DataQualityPanel issues={portfolio.issues} warnings={warnings} />
+            <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Settings</div>
+              <h2 className="mt-2 text-xl font-extrabold text-ink">Workspace Settings</h2>
+              <p className="mt-1 text-sm leading-6 text-steel">
+                Core setup now lives in Upload Reports and client goals live in Clients, so this page stays intentionally light.
+              </p>
+              {session ? (
+                <div className="mt-4 inline-flex rounded-full border border-line bg-warm px-3 py-1.5 text-xs font-bold text-steel">
+                  {cloudStatus || "Cloud sync ready"}
+                </div>
+              ) : null}
+            </section>
           </div>
         ) : null}
 
@@ -448,22 +360,20 @@ export default function App({ session }: { session: SupabaseSession | null }) {
               <div>
                 <h2 className="text-xl font-extrabold text-ink">Client Goals</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-steel">
-                  Switch accounts and adjust the working TACOS/coupon goals before reviewing the dashboard.
+                  Keep account goals here so Reporting, P&L, and Ad Potential can judge whether the plan is realistic.
                 </p>
               </div>
-              <ClientQuickSwitch
-                clients={clients}
-                activeClientId={activeClientId}
-                scenario={scenario}
-                onSelectClient={selectClient}
-                onScenarioChange={setScenario}
-                onUpdateActiveClientGoals={(patch) => updateClient(activeClientId, patch)}
-              />
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {clients.map((client) => {
                 const isActive = client.id === activeClientId;
                 const clientRows = clientSkuData[client.id]?.length ?? 0;
+                const goalsOpen = clientGoalsOpen[client.id] ?? isActive;
+                const goals = client.businessGoals ?? {};
+                const currentProjected = goals.currentProjectedSales ?? currentSales;
+                const desiredSales = goals.desiredSalesNextPeriod ?? 0;
+                const salesGap = desiredSales - currentProjected;
+                const realistic = desiredSales > 0 ? salesGap <= Math.max(currentProjected * 0.25, (goals.monthlyAdBudget ?? 0) * (goals.targetRoas ?? 1.5)) : true;
                 return (
                   <article
                     key={client.id}
@@ -490,32 +400,35 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                       </button>
                     </div>
                     <div className="mt-2 text-sm font-semibold text-steel">{clientRows ? `${number(clientRows)} imported SKU rows` : "Using sample data until reports are imported"}</div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <label className="rounded-lg border border-line bg-white px-3 py-2">
-                        <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-steel">TACOS Goal</span>
-                        <div className="mt-1 flex items-center gap-2">
-                          <input
-                            type="number"
-                            className="w-full bg-transparent text-lg font-extrabold text-ink outline-none"
-                            value={client.tacosGoal === null || client.tacosGoal === undefined ? "" : Math.round(client.tacosGoal * 1000) / 10}
-                            onChange={(event) => updateClient(client.id, { tacosGoal: event.target.value === "" ? null : Number(event.target.value) / 100 })}
-                          />
-                          <span className="text-sm font-bold text-steel">%</span>
+                    <button
+                      type="button"
+                      onClick={() => setClientGoalsOpen({ ...clientGoalsOpen, [client.id]: !goalsOpen })}
+                      className="mt-4 flex w-full items-center justify-between rounded-lg border border-line bg-white px-3 py-2 text-sm font-extrabold text-ink hover:border-brand"
+                    >
+                      <span>{goalsOpen ? "Hide business goals" : "Show business goals"}</span>
+                      <span className={realistic ? "text-emerald-700" : "text-red-700"}>{realistic ? "Realistic" : "Stretch"}</span>
+                    </button>
+                    {goalsOpen ? (
+                      <div className="mt-4 grid gap-3">
+                        <div className={`rounded-lg border p-3 text-sm ${realistic ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                          {desiredSales > 0
+                            ? realistic
+                              ? `Goal looks reasonable: ${currency(desiredSales)} target is within reach from the current projected ${currency(currentProjected)} run rate.`
+                              : `This is a stretch: target is ${currency(salesGap)} above the current projected run rate. Check budget, ROAS, conversion rate, and search demand.`
+                            : "Add a desired sales target to get a realism read."}
                         </div>
-                      </label>
-                      <label className="rounded-lg border border-line bg-white px-3 py-2">
-                        <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-steel">Coupon Goal</span>
-                        <div className="mt-1 flex items-center gap-2">
-                          <input
-                            type="number"
-                            className="w-full bg-transparent text-lg font-extrabold text-ink outline-none"
-                            value={Math.round((client.couponPercent ?? 0) * 1000) / 10}
-                            onChange={(event) => updateClient(client.id, { couponPercent: Number(event.target.value || 0) / 100 })}
-                          />
-                          <span className="text-sm font-bold text-steel">%</span>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <GoalInput label="Monthly ad budget" value={goals.monthlyAdBudget} prefix="$" onChange={(value) => updateClient(client.id, { businessGoals: { ...goals, monthlyAdBudget: value } })} />
+                          <GoalInput label="Primary TACOS goal" value={goals.primaryTacosGoal ?? client.tacosGoal} suffix="%" percent onChange={(value) => updateClient(client.id, { tacosGoal: value, businessGoals: { ...goals, primaryTacosGoal: value } })} />
+                          <GoalInput label="Acceptable TACOS ceiling" value={goals.acceptableTacosCeiling} suffix="%" percent onChange={(value) => updateClient(client.id, { businessGoals: { ...goals, acceptableTacosCeiling: value } })} />
+                          <GoalInput label="Target ROAS" value={goals.targetRoas} suffix="x" onChange={(value) => updateClient(client.id, { businessGoals: { ...goals, targetRoas: value } })} />
+                          <GoalInput label="Minimum ROAS" value={goals.minimumRoas} suffix="x" onChange={(value) => updateClient(client.id, { businessGoals: { ...goals, minimumRoas: value } })} />
+                          <GoalInput label="Current projected sales" value={goals.currentProjectedSales ?? currentSales} prefix="$" onChange={(value) => updateClient(client.id, { businessGoals: { ...goals, currentProjectedSales: value } })} />
+                          <GoalInput label="Desired next 30-day sales" value={goals.desiredSalesNextPeriod} prefix="$" onChange={(value) => updateClient(client.id, { businessGoals: { ...goals, desiredSalesNextPeriod: value } })} />
+                          <GoalInput label="Coupon goal" value={client.couponPercent} suffix="%" percent onChange={(value) => updateClient(client.id, { couponPercent: value ?? 0 })} />
                         </div>
-                      </label>
-                    </div>
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}
@@ -629,6 +542,42 @@ function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingSt
       </div>
       </div>
     </section>
+  );
+}
+
+function GoalInput({
+  label,
+  value,
+  prefix,
+  suffix,
+  percent: isPercent,
+  onChange,
+}: {
+  label: string;
+  value?: number | null;
+  prefix?: string;
+  suffix?: string;
+  percent?: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  const displayValue = value === null || value === undefined ? "" : isPercent ? Math.round(value * 1000) / 10 : value;
+  return (
+    <label className="rounded-lg border border-line bg-white px-3 py-2">
+      <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-steel">{label}</span>
+      <div className="mt-1 flex items-center gap-2">
+        {prefix ? <span className="text-sm font-bold text-steel">{prefix}</span> : null}
+        <input
+          type="number"
+          className="w-full bg-transparent text-lg font-extrabold text-ink outline-none"
+          value={displayValue}
+          onChange={(event) => {
+            const raw = event.target.value;
+            onChange(raw === "" ? null : isPercent ? Number(raw) / 100 : Number(raw));
+          }}
+        />
+        {suffix ? <span className="text-sm font-bold text-steel">{suffix}</span> : null}
+      </div>
+    </label>
   );
 }
 

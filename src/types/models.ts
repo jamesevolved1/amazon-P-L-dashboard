@@ -184,6 +184,17 @@ export interface ClientAccount {
   marketplace?: string;
   tacosGoal?: number | null;
   couponPercent?: number;
+  businessGoals?: ClientBusinessGoals;
+}
+
+export interface ClientBusinessGoals {
+  monthlyAdBudget?: number | null;
+  primaryTacosGoal?: number | null;
+  acceptableTacosCeiling?: number | null;
+  targetRoas?: number | null;
+  minimumRoas?: number | null;
+  currentProjectedSales?: number | null;
+  desiredSalesNextPeriod?: number | null;
 }
 
 export interface AdPotentialBaseline {

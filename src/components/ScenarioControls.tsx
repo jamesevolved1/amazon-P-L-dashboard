@@ -107,7 +107,7 @@ export function ScenarioControls({ scenario, onChange, onSave, expanded: control
             <option value="velocity">Velocity forecast</option>
           </select>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-3 grid grid-cols-1 gap-3">
           <label className="block">
             <span className="text-xs font-bold text-steel">Forecast days</span>
             <input
@@ -117,17 +117,6 @@ export function ScenarioControls({ scenario, onChange, onSave, expanded: control
               className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-brand"
               value={scenario.forecastDays ?? 30}
               onChange={(event) => update("forecastDays", Math.max(1, Number(event.target.value || 30)))}
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-bold text-steel">Velocity multiplier</span>
-            <input
-              type="number"
-              step="0.05"
-              min="0"
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-brand"
-              value={scenario.velocityMultiplier ?? 1}
-              onChange={(event) => update("velocityMultiplier", Math.max(0, Number(event.target.value || 1)))}
             />
           </label>
         </div>

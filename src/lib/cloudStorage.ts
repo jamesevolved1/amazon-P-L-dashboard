@@ -21,6 +21,7 @@ interface ClientRow {
   marketplace: string | null;
   tacos_goal: number | null;
   coupon_percent: number | null;
+  business_goals: ClientAccount["businessGoals"] | null;
 }
 
 interface WorkspaceRow {
@@ -47,6 +48,7 @@ function fromClientRow(row: ClientRow): ClientAccount {
     marketplace: row.marketplace ?? "Amazon US",
     tacosGoal: row.tacos_goal,
     couponPercent: row.coupon_percent ?? 0,
+    businessGoals: row.business_goals ?? {},
   };
 }
 
@@ -54,7 +56,7 @@ export async function loadCloudState(userId: string): Promise<CloudState> {
   const client = requireSupabase();
   const { data: clientRows, error: clientsError } = await client
     .from("clients")
-    .select("id,name,marketplace,tacos_goal,coupon_percent")
+    .select("id,name,marketplace,tacos_goal,coupon_percent,business_goals")
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
@@ -113,8 +115,9 @@ export async function createCloudClient(userId: string, clientAccount: Omit<Clie
       marketplace: clientAccount.marketplace ?? "Amazon US",
       tacos_goal: clientAccount.tacosGoal ?? null,
       coupon_percent: clientAccount.couponPercent ?? 0,
+      business_goals: clientAccount.businessGoals ?? {},
     })
-    .select("id,name,marketplace,tacos_goal,coupon_percent")
+    .select("id,name,marketplace,tacos_goal,coupon_percent,business_goals")
     .single();
 
   if (error) throw error;
@@ -128,6 +131,7 @@ export async function updateCloudClient(userId: string, clientId: string, patch:
   if (patch.marketplace !== undefined) update.marketplace = patch.marketplace;
   if (patch.tacosGoal !== undefined) update.tacos_goal = patch.tacosGoal;
   if (patch.couponPercent !== undefined) update.coupon_percent = patch.couponPercent;
+  if (patch.businessGoals !== undefined) update.business_goals = patch.businessGoals;
 
   const { error } = await client.from("clients").update(update).eq("id", clientId).eq("user_id", userId);
   if (error) throw error;

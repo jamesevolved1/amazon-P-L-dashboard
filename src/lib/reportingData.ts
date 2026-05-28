@@ -179,6 +179,22 @@ function dailyFromRow(row: RawRow): ReportingDailyRow {
   };
 }
 
+function dailyFromAdRows(rows: RawRow[]): ReportingDailyRow[] {
+  const groups = new Map<string, ReportingDailyRow>();
+  rows.forEach((row) => {
+    const day = text(row, headerAliases.date);
+    if (!day) return;
+    const current = groups.get(day) ?? { day, spend: 0, sales: 0, impressions: 0, clicks: 0, orders: 0 };
+    current.spend += amount(row, headerAliases.spend);
+    current.sales += amount(row, headerAliases.sales);
+    current.impressions += amount(row, headerAliases.impressions);
+    current.clicks += amount(row, headerAliases.clicks);
+    current.orders += amount(row, headerAliases.orders);
+    groups.set(day, current);
+  });
+  return [...groups.values()].sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime());
+}
+
 function buildBusinessSalesLookup(rows: RawRow[]) {
   return rows.reduce<Record<string, number>>((acc, row) => {
     const asin = text(row, headerAliases.asin);
@@ -220,13 +236,14 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
   );
 
   const totalSalesByAsin = buildBusinessSalesLookup(businessRows);
+  const daily = dailyRows.map(dailyFromRow).filter((row) => row.day !== "No date" || row.spend || row.sales);
   return {
     sourceConfig: config,
     lastRefreshedAt: new Date().toISOString(),
     campaigns: campaignRows.map(campaignFromRow).filter((row) => row.campaign !== "Unnamed campaign" || row.spend || row.sales),
     products: productRows.map((row) => productFromRow(row, totalSalesByAsin)).filter((row) => row.product !== "Unnamed product" || row.spend || row.adSales),
     searchTerms: searchTermRows.map(searchTermFromRow).filter((row) => row.searchTerm !== "Unnamed search term" || row.spend || row.sales),
-    daily: dailyRows.map(dailyFromRow).filter((row) => row.day !== "No date" || row.spend || row.sales),
+    daily: daily.length ? daily : dailyFromAdRows([...campaignRows, ...productRows, ...searchTermRows]),
     errors,
   };
 }

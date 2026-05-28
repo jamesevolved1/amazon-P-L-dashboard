@@ -1,6 +1,5 @@
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, FolderOpen, Play, Sparkles, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, FolderOpen, Play, Sparkles, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
-import { downloadCogsTemplate } from "../lib/cogsTemplate";
 import { parseAmazonMasterWorkbook, parseAmazonReportBundle } from "../lib/excelParser";
 import type { ImportSummary, ProductSku } from "../types/models";
 
@@ -19,43 +18,15 @@ type ReportSlot = {
 const reportSlots: ReportSlot[] = [
   {
     id: "profit-matrix",
-    title: "Master Workbook or Legacy Profit Matrix",
-    description: "One workbook with source report tabs, or the older combined Profit Matrix workbook.",
+    title: "Client Master Workbook",
+    description: "Your Profit Matrix Master with P&L, 30-day business report, advertised product summary, fees, storage, and COGS/unit economics tabs.",
     accepts: ".xlsx,.xls,.csv",
   },
   {
-    id: "fee-preview",
-    title: "Fee Preview Report",
-    description: "Amazon fee preview or FBA fees export with ASIN/SKU, referral fees, fulfillment fees, and price.",
-    required: true,
-    accepts: ".xlsx,.xls,.csv",
-  },
-  {
-    id: "storage-fees",
-    title: "Monthly Storage Fee Report",
-    description: "Storage fees by ASIN/SKU so storage can be modeled per unit.",
-    required: true,
-    accepts: ".xlsx,.xls,.csv",
-  },
-  {
-    id: "business-report",
-    title: "Business Report",
-    description: "Sales and traffic report with units ordered and ordered product sales.",
-    required: true,
-    accepts: ".xlsx,.xls,.csv",
-  },
-  {
-    id: "advertised-products",
-    title: "Advertised Product Report",
-    description: "Sponsored ads report with advertised ASIN/SKU, spend, sales, orders, and units.",
-    required: true,
-    accepts: ".xlsx,.xls,.csv",
-  },
-  {
-    id: "cogs",
-    title: "COGS / Unit Economics Mapping",
-    description: "A sheet like your Profit Matrix tab: SKU, ASIN, product title, price, COGS, fulfillment, ship-to-AMZ, storage, and referral fees.",
-    required: true,
+    id: "campaign-export",
+    title: "Bulk Campaign Export",
+    description: "Large Amazon Ads campaign export with campaign, targeting, keyword/search-term, Sponsored Products, Brands, Display, and placement data.",
+    required: false,
     accepts: ".xlsx,.xls,.csv",
   },
 ];
@@ -68,7 +39,7 @@ export function FileImport({ onLoaded }: FileImportProps) {
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
   const [buildState, setBuildState] = useState<"idle" | "success" | "error">("idle");
 
-  const sourceSlotIds = reportSlots.filter((slot) => slot.id !== "profit-matrix").map((slot) => slot.id);
+  const sourceSlotIds = reportSlots.filter((slot) => slot.id !== "profit-matrix" && slot.id !== "campaign-export").map((slot) => slot.id);
   const stagedFileCount = Object.values(files).reduce((total, slotFiles) => total + slotFiles.length, 0);
   const hasSourceFiles = sourceSlotIds.some((id) => (files[id] ?? []).length > 0);
   const hasMasterWorkbook = (files["profit-matrix"] ?? []).length > 0;
@@ -139,22 +110,6 @@ export function FileImport({ onLoaded }: FileImportProps) {
           </div>
           <button
             type="button"
-            onClick={() => downloadCogsTemplate("csv")}
-            className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-xs font-bold uppercase tracking-wide text-ink hover:bg-warm"
-          >
-            <Download className="h-3.5 w-3.5" />
-            COGS CSV
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadCogsTemplate("xlsx")}
-            className="inline-flex items-center gap-2 rounded-full bg-brand px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-deep"
-          >
-            <Download className="h-3.5 w-3.5" />
-            COGS XLSX
-          </button>
-          <button
-            type="button"
             onClick={buildModel}
             disabled={!canBuild}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate/40 ${
@@ -181,7 +136,7 @@ export function FileImport({ onLoaded }: FileImportProps) {
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
         {reportSlots.map((slot) => (
           <ReportDropZone
             key={slot.id}

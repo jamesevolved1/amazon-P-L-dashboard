@@ -10,14 +10,30 @@ const adPotentialKey = "amazon-sku-profitability-ad-potential";
 const reportingKey = "amazon-sku-profitability-reporting";
 
 export const defaultClients: ClientAccount[] = [
-  { id: "demo-redmond", name: "Demo Account", marketplace: "Amazon US", tacosGoal: 0.09, couponPercent: 0 },
+  {
+    id: "demo-redmond",
+    name: "Demo Account",
+    marketplace: "Amazon US",
+    tacosGoal: 0.35,
+    couponPercent: 0,
+    businessGoals: {
+      monthlyAdBudget: 800,
+      primaryTacosGoal: 0.35,
+      acceptableTacosCeiling: 0.4,
+      targetRoas: 1.5,
+      minimumRoas: 1,
+      currentProjectedSales: 2713.51,
+      desiredSalesNextPeriod: 3000,
+    },
+  },
 ];
 
 function normalizeClient(client: ClientAccount): ClientAccount {
   return {
     marketplace: "Amazon US",
-    tacosGoal: 0.09,
+    tacosGoal: 0.35,
     couponPercent: 0,
+    businessGoals: {},
     ...client,
   };
 }

@@ -31,14 +31,13 @@ interface SidebarProps {
 }
 
 const navItems: Array<{ id: AppSection; label: string; icon: typeof LayoutDashboard }> = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "clients", label: "Clients", icon: Users },
-  { id: "upload", label: "Upload Reports", icon: UploadCloud },
-  { id: "sku-pnl", label: "SKU P&L", icon: FileSpreadsheet },
-  { id: "parent-asin", label: "Parent ASIN P&L", icon: FolderTree },
   { id: "reporting", label: "Reporting Dashboard", icon: LineChart },
+  { id: "dashboard", label: "P&L Dashboard", icon: LayoutDashboard },
+  { id: "parent-asin", label: "Parent ASIN P&L", icon: FolderTree },
   { id: "ad-potential", label: "Ad Potential", icon: Sparkles },
   { id: "performance", label: "Performance Review", icon: BarChart3 },
+  { id: "upload", label: "Upload Reports", icon: UploadCloud },
+  { id: "clients", label: "Clients", icon: Users },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

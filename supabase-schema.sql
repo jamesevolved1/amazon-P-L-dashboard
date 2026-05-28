@@ -5,9 +5,13 @@ create table if not exists clients (
   marketplace text default 'Amazon US',
   tacos_goal numeric,
   coupon_percent numeric default 0,
+  business_goals jsonb not null default '{}',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table clients
+add column if not exists business_goals jsonb not null default '{}';
 
 create table if not exists client_workspaces (
   id uuid primary key default gen_random_uuid(),

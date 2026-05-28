@@ -133,6 +133,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const roas = totals.spend ? totals.sales / totals.spend : 0;
   const ctr = totals.impressions ? totals.clicks / totals.impressions : 0;
   const cpc = totals.clicks ? totals.spend / totals.clicks : 0;
+  const conversionRate = totals.clicks ? totals.orders / totals.clicks : 0;
   const hasImportedData = Boolean(state.lastRefreshedAt);
   const refreshedLabel = state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Using sample data";
   const topCampaigns = [...campaignData].sort((a, b) => b.sales - a.sales).slice(0, 5);
@@ -158,7 +159,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             <div>
               <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-accent">Amazon Ads Command Center</div>
               <h2 className="mt-2 text-2xl font-extrabold">Reporting Dashboard</h2>
-              <p className="mt-1 max-w-3xl text-sm text-white/75">Campaign, product, search-term, and budget-pacing views for client reporting.</p>
+              <p className="mt-1 max-w-3xl text-sm text-white/75">Impressions, clicks, sales, ROAS, TACOS, campaign performance, and product-level advertising signals.</p>
               <div className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-extrabold text-white/80">
                 {hasImportedData ? `Last refreshed ${refreshedLabel}` : "Set up this client's sheet in Settings to replace the sample dashboard"}
               </div>
@@ -188,12 +189,16 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           </div>
         </div>
 
-        <div className="grid gap-4 bg-[#F1F4F8] p-5 md:grid-cols-2 xl:grid-cols-6">
-          <ReportMetric label="Total Spend" value={currency(totals.spend)} delta="-12.7%" tone="bad" />
+        <div className="grid gap-4 bg-[#F1F4F8] p-5 md:grid-cols-2 xl:grid-cols-5">
+          <ReportMetric label="Impressions" value={number(totals.impressions)} delta="+2.3%" tone="neutral" />
+          <ReportMetric label="Clicks" value={number(totals.clicks)} delta="+6.6%" tone="good" />
+          <ReportMetric label="Total Sales" value={currency(totals.sales)} delta="+12.7%" tone="good" />
+          <ReportMetric label="Ad Spend" value={currency(totals.spend)} delta="-12.7%" tone="bad" />
           <ReportMetric label="Ad Sales" value={currency(totals.sales)} delta="+12.7%" tone="good" />
-          <ReportMetric label="ACOS" value={percent(acos)} delta="-2.1pp" tone="good" />
           <ReportMetric label="ROAS" value={`${roas.toFixed(1)}x`} delta="+0.4x" tone="good" />
           <ReportMetric label="CTR" value={percent(ctr)} delta="+0.8pp" tone="good" />
+          <ReportMetric label="Orders" value={number(totals.orders)} delta="+4.1%" tone="good" />
+          <ReportMetric label="Conv. Rate" value={percent(conversionRate)} delta="+0.5pp" tone="good" />
           <ReportMetric label="CPC" value={`$${cpc.toFixed(2)}`} delta="+6.6%" tone="neutral" />
         </div>
       </div>
@@ -203,7 +208,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           <div className="rounded-lg border border-line bg-white p-5 shadow-card">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h3 className="text-lg font-extrabold text-ink">Spend, Sales, Clicks, and Impressions</h3>
+                <h3 className="text-lg font-extrabold text-ink">Spend, Sales, ROAS, Clicks, and Impressions</h3>
                 <p className="mt-1 text-sm text-steel">Daily trend view for the selected date range.</p>
               </div>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-800">Live-ready</span>

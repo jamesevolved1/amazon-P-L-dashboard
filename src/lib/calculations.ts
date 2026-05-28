@@ -94,6 +94,7 @@ export function calculateSkuPnl(
   const dataIssues = skuDataIssues(sku);
   const status = getStatus({
     dataIssues,
+    currentProfit,
     estimatedProfit,
     profitMargin,
     breakEvenTacos,
@@ -276,13 +277,14 @@ function skuDataIssues(sku: ProductSku) {
 
 function getStatus(input: {
   dataIssues: string[];
+  currentProfit: number;
   estimatedProfit: number;
   profitMargin: number;
   breakEvenTacos: number;
   scenarioTacos: number;
 }): PnlStatus {
   if (input.dataIssues.some((issue) => issue.startsWith("Missing"))) return "Data Missing";
-  if (input.estimatedProfit < 0) return "Unprofitable";
+  if (input.currentProfit < 0 || input.estimatedProfit < 0) return "Unprofitable";
   if (input.breakEvenTacos < 0.08) return "Needs Price / Cost Fix";
   if (input.profitMargin < 0.15) return "Watch Margin";
   if (input.scenarioTacos < input.breakEvenTacos * 0.72 && input.profitMargin >= 0.2) {
