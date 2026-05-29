@@ -1,4 +1,4 @@
-import { CheckCircle2, FileSpreadsheet, LineChart, PackageCheck, RefreshCw, Target, Trash2, TrendingUp } from "lucide-react";
+import { LineChart, PackageCheck, Target, Trash2, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdPotential } from "./components/AdPotential";
 import { DataQualityPanel } from "./components/DataQualityPanel";
@@ -15,11 +15,10 @@ import { SkuProfitTable } from "./components/SkuProfitTable";
 import { TacosSnapshot } from "./components/TacosSnapshot";
 import { aggregateParentAsinPnl, calculatePortfolio } from "./lib/calculations";
 import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudAdPotentialState, saveCloudReportingState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
-import { parseAmazonGoogleSheet } from "./lib/excelParser";
 import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
 import { initialAdPotentialState } from "./lib/adPotentialCalculations";
-import { emptyReportingSourceConfig, emptyReportingState, refreshReportingFromSheets } from "./lib/reportingData";
+import { emptyReportingState } from "./lib/reportingData";
 import { loadActiveClientId, loadAdPotentialStates, loadClients, loadClientSkuData, loadReportingStates, loadSavedScenarios, saveActiveClientId, saveAdPotentialStates, saveClients, saveClientSkuData, saveReportingStates, saveScenarios } from "./lib/storage";
 import type { SupabaseSession } from "./lib/supabase";
 import type { AdPotentialPlannerState, AppSection, CalculatedSkuPnl, ClientAccount, ProductSku, ReportingState, ScenarioAssumptions } from "./types/models";
@@ -251,30 +250,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
       <div className={`min-h-screen transition-[padding] duration-200 ${sidebarCollapsed ? "pl-[76px]" : "pl-[284px]"}`}>
       <main className="mx-auto grid max-w-[1720px] gap-5 px-6 py-4">
         {activeSection === "upload" ? (
-          <div className="grid gap-5">
-            <ReportingSourcesSettings
-              state={activeReportingState}
-              onStateChange={updateReportingState}
-              onBuildModel={(loadedSkus, importWarnings) => {
-                const importedAt = new Date().toISOString();
-                const stampedSkus = loadedSkus.map((sku) => ({ ...sku, importedAt }));
-                setWarnings(importWarnings);
-                setSelected(null);
-                if (!stampedSkus.length) return;
-                const nextSkuData = { ...clientSkuData, [activeClientId]: stampedSkus };
-                const nextWorkspaceWarnings = { ...workspaceWarnings, [activeClientId]: importWarnings };
-                setClientSkuData(nextSkuData);
-                setWorkspaceWarnings(nextWorkspaceWarnings);
-                saveClientSkuData(nextSkuData);
-                if (userId && activeClientId) {
-                  setCloudStatus("Saving workspace...");
-                  saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings, activeAdPotentialState)
-                    .then(() => setCloudStatus("Cloud saved"))
-                    .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
-                }
-              }}
-            />
-            <FileImport
+          <FileImport
               onLoaded={(loadedSkus, importWarnings) => {
                 const importedAt = new Date().toISOString();
                 const stampedSkus = loadedSkus.map((sku) => ({ ...sku, importedAt }));
@@ -302,9 +278,8 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                     .then(() => setCloudStatus("Cloud saved"))
                     .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
                 }
-              }}
-            />
-          </div>
+                  }}
+          />
         ) : null}
 
         {activeSection === "dashboard" ? (
@@ -529,138 +504,6 @@ export default function App({ session }: { session: SupabaseSession | null }) {
       <SkuDetailDrawer row={selected} onClose={() => setSelected(null)} />
       </div>
     </div>
-  );
-}
-
-function ReportingSourcesSettings({
-  state,
-  onStateChange,
-  onBuildModel,
-}: {
-  state: ReportingState;
-  onStateChange: (state: ReportingState) => void;
-  onBuildModel: (skus: ProductSku[], warnings: string[]) => void;
-}) {
-  const [draft, setDraft] = useState({ ...emptyReportingSourceConfig, ...state.sourceConfig });
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const tabFields: Array<{ key: keyof typeof draft; label: string }> = [
-    { key: "profitMatrixTabName", label: "Profit Matrix / COGS tab" },
-    { key: "bulkCampaignTabName", label: "Bulk campaign export tabs" },
-    { key: "productTabName", label: "Advertised product tab" },
-    { key: "searchTermTabName", label: "Search term tab" },
-    { key: "businessTabName", label: "Business report tab" },
-    { key: "feePreviewTabName", label: "Fee preview tab" },
-    { key: "storageTabName", label: "Storage fee tab" },
-  ];
-
-  const refresh = async () => {
-    setIsRefreshing(true);
-    setSubmitState("loading");
-    try {
-      const [reportingState, skuResult] = await Promise.all([
-        refreshReportingFromSheets(draft),
-        parseAmazonGoogleSheet(draft),
-      ]);
-      onStateChange(reportingState);
-      onBuildModel(skuResult.skus, skuResult.warnings);
-      setSubmitState("success");
-      window.setTimeout(() => setSubmitState("idle"), 1800);
-    } catch (error) {
-      setSubmitState("error");
-      onStateChange({ ...state, sourceConfig: draft, errors: [error instanceof Error ? error.message : "Could not refresh reporting data."] });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  return (
-    <section className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
-      <div className={`h-1.5 transition-all duration-700 ${submitState === "loading" ? "bg-brand" : submitState === "success" ? "bg-emerald-500" : submitState === "error" ? "bg-danger" : "bg-warm"}`} />
-      <div className="p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Client Data Sources</div>
-          <h2 className="mt-2 text-xl font-extrabold text-ink">One master Google Sheet</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
-            Paste one spreadsheet link for this client, confirm the tab names, then refresh P&L, reporting, and client KPIs from the sheet.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => {
-              onStateChange({ ...state, sourceConfig: draft });
-              setSubmitState("success");
-              window.setTimeout(() => setSubmitState("idle"), 1400);
-            }}
-            className="rounded-full border border-line bg-white px-4 py-2 text-sm font-extrabold uppercase tracking-wide hover:bg-warm"
-          >
-            Save Source
-          </button>
-          <button
-            onClick={refresh}
-            disabled={isRefreshing}
-            className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg transition-all duration-300 disabled:opacity-70 ${
-              submitState === "success" ? "scale-[1.03] bg-emerald-600 shadow-emerald-200" : "bg-brand shadow-brand/20 hover:-translate-y-0.5 hover:bg-deep"
-            }`}
-          >
-            {submitState === "success" ? <CheckCircle2 className="h-4 w-4" /> : <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />}
-            {submitState === "success" ? "Dashboard Updated" : isRefreshing ? "Building..." : "Submit & Build"}
-          </button>
-        </div>
-      </div>
-      <label className="mt-5 grid gap-2 rounded-lg border border-line bg-warm/40 p-4">
-        <span className="text-sm font-extrabold text-ink">Master Google Sheet link</span>
-        <input
-          value={draft.masterSheetUrl}
-          onChange={(event) => setDraft({ ...draft, masterSheetUrl: event.target.value })}
-          placeholder="https://docs.google.com/spreadsheets/d/.../edit"
-          className="rounded-md border border-line bg-white px-3 py-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
-        />
-        <span className="text-xs leading-5 text-steel">Set sharing to Anyone with the link: Viewer. Use one workbook per client; the app reads the tabs below from this sheet.</span>
-      </label>
-      <div className="mt-5 grid gap-3 lg:grid-cols-3">
-        {tabFields.map((field) => (
-          <label key={field.key} className="grid gap-2">
-            <span className="text-sm font-extrabold text-ink">{field.label}</span>
-            <input
-              value={draft[field.key]}
-              onChange={(event) => setDraft({ ...draft, [field.key]: event.target.value })}
-              placeholder={field.key === "bulkCampaignTabName" ? "Comma-separated tab names" : "Tab name"}
-              className="rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
-            />
-          </label>
-        ))}
-      </div>
-      <div className="mt-5 grid gap-3 lg:grid-cols-3">
-        {[
-          ["Reporting Summary", "Optional but ideal: Start Date, End Date, Total Sales, Organic Sales, Ad Sales, Ad Spend, Impressions, Clicks, Orders, Sessions, Units Ordered."],
-          ["Business Report", "Required for true total sales/TACOS: Parent ASIN, Child ASIN, Title, Sessions, Units Ordered, Ordered Product Sales, Total Order Items."],
-          ["Bulk Campaign Export Tabs", "Required for ads: paste the Amazon bulk workbook tabs into this sheet, then list those tab names comma-separated. Use Sponsored Products Campaigns, Sponsored Brands Campaigns, SB Multi Ad Group Campaigns, Sponsored Display Campaigns, and search-term tabs."],
-          ["Advertising Product Summary", "Recommended for SKU ad detail: Advertised SKU, Advertised ASIN, Spend, Total Sales, Impressions, Clicks, Orders."],
-          ["Profit Matrix", "Required for costs: SKU, ASIN, Product Title, Price, COGS, ship-to-Amazon, storage, referral, fulfillment/FBA fees."],
-          ["Fee Preview + Storage", "Recommended for fee accuracy: Amazon fee preview and monthly storage fee report tabs copied directly from Amazon."],
-        ].map(([title, description]) => (
-          <div key={title} className="rounded-lg border border-line bg-warm/50 p-3">
-            <div className="text-sm font-extrabold text-ink">{title}</div>
-            <p className="mt-1 text-xs leading-5 text-steel">{description}</p>
-          </div>
-        ))}
-      </div>
-      <div className={`mt-5 rounded-lg border p-4 text-sm transition-all duration-500 ${
-        submitState === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : submitState === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-line bg-warm/50 text-steel"
-      }`}>
-        <div className="flex items-center gap-2 font-extrabold">
-          {submitState === "success" ? <CheckCircle2 className="h-5 w-5" /> : <FileSpreadsheet className="h-5 w-5" />}
-          {submitState === "success" ? "Sheet accepted. P&L and reporting rebuilt." : "Ready for one-sheet reporting and P&L."}
-        </div>
-        <div className="mt-1">
-        Last refreshed: <strong className="text-ink">{state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Not refreshed yet"}</strong>
-        </div>
-        {state.errors.length ? <div className="mt-2 font-semibold">{state.errors.join(" ")}</div> : null}
-      </div>
-      </div>
-    </section>
   );
 }
 
