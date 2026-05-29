@@ -261,6 +261,9 @@ function classifyRows(sheets: Array<{ sheetName: string; rows: RawRow[] }>) {
 
   sheets.forEach(({ sheetName, rows }) => {
     const name = cleanHeader(sheetName);
+    const isSearchTermSheet = name.includes("search term");
+    const isAdvertisedProductSheet = name.includes("advertis") && name.includes("product") && !name.includes("campaign");
+    const isBulkCampaignSheet = name.includes("campaign");
     rows.forEach((row) => {
       const hasSpend = rowHas(row, headerAliases.spend);
       const hasSales = rowHas(row, headerAliases.sales) || rowHas(row, headerAliases.totalSales);
@@ -269,11 +272,17 @@ function classifyRows(sheets: Array<{ sheetName: string; rows: RawRow[] }>) {
       const hasSearchTerm = rowHas(row, headerAliases.searchTerm);
       const hasDate = rowHas(row, headerAliases.date);
       const hasBusinessSignal = rowHas(row, headerAliases.totalSales) && (name.includes("business") || name.includes("sales traffic") || hasAsin);
+      const entity = cleanHeader(text(row, ["Entity"]));
+      const isCampaignEntity = !isBulkCampaignSheet || entity === "campaign";
+      const isProductEntity = !isBulkCampaignSheet || entity === "product ad";
 
       if (hasBusinessSignal && !hasSpend) businessRows.push(row);
-      if (hasSearchTerm && hasSpend) searchTermRows.push(row);
-      if (hasCampaign && hasSpend) campaignRows.push(row);
-      if (hasAsin && hasSpend) productRows.push(row);
+      if ((isSearchTermSheet || hasSearchTerm) && hasSpend) {
+        searchTermRows.push(row);
+      } else if (hasCampaign && hasSpend && isCampaignEntity && !isAdvertisedProductSheet) {
+        campaignRows.push(row);
+      }
+      if (hasAsin && hasSpend && (isAdvertisedProductSheet || isProductEntity)) productRows.push(row);
       if (hasDate && (hasSpend || hasSales)) dailyRows.push(row);
     });
   });
