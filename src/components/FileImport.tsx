@@ -27,6 +27,20 @@ type PackItem = {
   required?: boolean;
 };
 
+type BrowserFileSystemEntry = {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+  file?: (success: (file: File) => void, error?: (error: Error) => void) => void;
+  createReader?: () => {
+    readEntries: (success: (entries: BrowserFileSystemEntry[]) => void, error?: (error: Error) => void) => void;
+  };
+};
+
+type BrowserDataTransferItem = DataTransferItem & {
+  webkitGetAsEntry?: () => BrowserFileSystemEntry | null;
+};
+
 const reportSlots: ReportSlot[] = [
   {
     id: "profit-matrix",
@@ -292,6 +306,49 @@ async function expandFile(file: File): Promise<File[]> {
   return files;
 }
 
+async function getDroppedReportFiles(dataTransfer: DataTransfer): Promise<File[]> {
+  const items = Array.from(dataTransfer.items ?? []) as BrowserDataTransferItem[];
+  const entries = items.reduce<BrowserFileSystemEntry[]>((acc, item) => {
+    const entry = item.webkitGetAsEntry?.() as BrowserFileSystemEntry | null | undefined;
+    if (entry) acc.push(entry);
+    return acc;
+  }, []);
+
+  if (!entries.length) {
+    return Array.from(dataTransfer.files).filter(isReportFile);
+  }
+
+  const files = (await Promise.all(entries.map(readDroppedEntry))).flat();
+  return files.filter(isReportFile);
+}
+
+async function readDroppedEntry(entry: BrowserFileSystemEntry): Promise<File[]> {
+  if (entry.isFile && entry.file) {
+    return new Promise((resolve, reject) => {
+      entry.file?.((file) => resolve([file]), reject);
+    });
+  }
+
+  if (!entry.isDirectory || !entry.createReader) return [];
+
+  const reader = entry.createReader();
+  const children: BrowserFileSystemEntry[] = [];
+
+  while (true) {
+    const batch = await new Promise<BrowserFileSystemEntry[]>((resolve, reject) => {
+      reader.readEntries(resolve, reject);
+    });
+    if (!batch.length) break;
+    children.push(...batch);
+  }
+
+  return (await Promise.all(children.map(readDroppedEntry))).flat();
+}
+
+function isReportFile(file: File): boolean {
+  return /\.(zip|xlsx|xls|csv)$/i.test(file.name);
+}
+
 function fileTypeFromName(name: string) {
   if (name.toLowerCase().endsWith(".csv")) return "text/csv";
   return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -385,7 +442,7 @@ function ReportPackDropZone({
       onDrop={(event) => {
         event.preventDefault();
         onDragState(null);
-        onFiles(event.dataTransfer.files);
+        getDroppedReportFiles(event.dataTransfer).then(onFiles);
       }}
       className={`mt-5 rounded-xl border-2 border-dashed p-6 transition ${
         isDragging ? "border-brand bg-orange-50" : "border-[rgba(143,162,175,0.45)] bg-[#FAFAFA] hover:border-brand hover:bg-orange-50/40"
@@ -400,6 +457,9 @@ function ReportPackDropZone({
             <h3 className="text-lg font-extrabold text-ink">Drop your client report pack here</h3>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
               Upload one zip, choose the whole report-pack folder, or select the master workbook and bulk campaign workbook together.
+            </p>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-slate">
+              If your browser blocks folder selection, right-click the folder in Finder, choose Compress, then upload the zip.
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-steel">
               <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.zip</span>
