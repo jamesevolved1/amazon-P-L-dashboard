@@ -114,9 +114,12 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
   const hasMasterWorkbook = (files["profit-matrix"] ?? []).length > 0;
   const masterFileName = files["profit-matrix"]?.[0]?.name ?? "";
   const masterIsCsv = masterFileName.toLowerCase().endsWith(".csv");
+  const masterCoveredPackItemIds = new Set(["business", "ads", "fees", "storage"]);
   const canBuild = stagedFileCount > 0 && !isBuilding && !isUnpacking;
   const foundPackItems = packItems.reduce<Record<string, boolean>>((acc, item) => {
-    acc[item.id] = item.slotIds.some((slotId) => (files[slotId] ?? []).length > 0);
+    acc[item.id] =
+      item.slotIds.some((slotId) => (files[slotId] ?? []).length > 0) ||
+      (hasMasterWorkbook && !masterIsCsv && masterCoveredPackItemIds.has(item.id));
     return acc;
   }, {});
 
@@ -254,7 +257,8 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
                   <p className="mt-1 text-xs leading-5 text-steel">{item.helper}</p>
                   {found ? (
                     <div className="mt-2 text-[11px] font-bold text-emerald-800">
-                      {item.slotIds.flatMap((slotId) => files[slotId] ?? []).map((file) => file.name).join(", ")}
+                      {item.slotIds.flatMap((slotId) => files[slotId] ?? []).map((file) => file.name).join(", ") ||
+                        `Covered by ${masterFileName}`}
                     </div>
                   ) : null}
                 </div>
