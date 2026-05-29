@@ -11,7 +11,7 @@ import type {
 export const emptyReportingSourceConfig: ReportingSourceConfig = {
   masterSheetUrl: "",
   profitMatrixTabName: "Profit Matrix",
-  bulkCampaignTabName: "Bulk Campaign Export",
+  bulkCampaignTabName: "Sponsored Products Campaigns, Sponsored Brands Campaigns, SB Multi Ad Group Campaigns, Sponsored Display Campaigns, SP Search Term Report, SB Search Term Report",
   campaignTabName: "Campaign Report",
   productTabName: "Advertised Product Report",
   searchTermTabName: "Search Term Report",
@@ -124,6 +124,13 @@ export function tabCsvUrl(masterSheetUrl: string, tabName: string) {
 
 function sourceUrl(config: ReportingSourceConfig, key: keyof Pick<ReportingSourceConfig, "campaignCsvUrl" | "productCsvUrl" | "searchTermCsvUrl" | "dailyCsvUrl" | "businessCsvUrl">, tabName: string) {
   return config.masterSheetUrl.trim() ? tabCsvUrl(config.masterSheetUrl, tabName) : config[key];
+}
+
+function splitTabNames(value: string) {
+  return value
+    .split(/[,;\n]/)
+    .map((name) => name.trim())
+    .filter(Boolean);
 }
 
 export async function fetchSheetRows(url: string): Promise<RawRow[]> {
@@ -393,15 +400,30 @@ export function normalizeReportingState(state?: Partial<ReportingState> | null):
 
 export async function refreshReportingFromSheets(config: ReportingSourceConfig): Promise<ReportingState> {
   const errors: string[] = [];
-  const [campaignRows, bulkCampaignRows, productRows, searchTermRows, dailyRows, businessRows] = await Promise.all(
+  const bulkTabNames = splitTabNames(config.bulkCampaignTabName);
+  const [campaignRows, bulkSheets, productRows, searchTermRows, dailyRows, businessRows] = await Promise.all(
     ([
       ["Campaign report", sourceUrl(config, "campaignCsvUrl", config.campaignTabName)],
-      ["Bulk campaign export", config.masterSheetUrl.trim() && config.bulkCampaignTabName.trim() ? tabCsvUrl(config.masterSheetUrl, config.bulkCampaignTabName) : ""],
+      ["Bulk campaign export", ""],
       ["Advertised product report", sourceUrl(config, "productCsvUrl", config.productTabName)],
       ["Search term report", sourceUrl(config, "searchTermCsvUrl", config.searchTermTabName)],
       ["Daily trend report", sourceUrl(config, "dailyCsvUrl", config.dailyTabName)],
       ["Business report", sourceUrl(config, "businessCsvUrl", config.businessTabName)],
     ] as const).map(async ([label, url]) => {
+      if (label === "Bulk campaign export") {
+        if (!config.masterSheetUrl.trim() || !bulkTabNames.length) return [];
+        const tabResults = await Promise.all(
+          bulkTabNames.map(async (tabName) => {
+            try {
+              return { sheetName: tabName, rows: await fetchRows(tabCsvUrl(config.masterSheetUrl, tabName)) };
+            } catch (error) {
+              errors.push(`${tabName}: ${error instanceof Error ? error.message : "Could not refresh."}`);
+              return { sheetName: tabName, rows: [] };
+            }
+          }),
+        );
+        return tabResults;
+      }
       try {
         return await fetchRows(url);
       } catch (error) {
@@ -413,7 +435,9 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
 
   const totalSalesByAsin = buildBusinessSalesLookup(businessRows);
   const daily = dailyRows.map(dailyFromRow).filter((row) => row.day !== "No date" || row.spend || row.sales);
-  const classifiedBulk = classifyRows([{ sheetName: config.bulkCampaignTabName, rows: bulkCampaignRows }]);
+  const bulkSheetList = Array.isArray(bulkSheets) ? (bulkSheets as Array<{ sheetName: string; rows: RawRow[] }>) : [];
+  const bulkCampaignRows = bulkSheetList.flatMap((sheet) => sheet.rows);
+  const classifiedBulk = classifyRows(bulkSheetList);
   const normalizedCampaignRows = bulkCampaignRows.length ? classifiedBulk.campaignRows : campaignRows;
   const normalizedProductRows = [...productRows, ...classifiedBulk.productRows];
   const normalizedSearchRows = [...searchTermRows, ...classifiedBulk.searchTermRows];

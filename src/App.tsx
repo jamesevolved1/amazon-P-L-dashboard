@@ -546,7 +546,7 @@ function ReportingSourcesSettings({
   const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const tabFields: Array<{ key: keyof typeof draft; label: string }> = [
     { key: "profitMatrixTabName", label: "Profit Matrix / COGS tab" },
-    { key: "bulkCampaignTabName", label: "Bulk campaign export tab" },
+    { key: "bulkCampaignTabName", label: "Bulk campaign export tabs" },
     { key: "productTabName", label: "Advertised product tab" },
     { key: "searchTermTabName", label: "Search term tab" },
     { key: "businessTabName", label: "Business report tab" },
@@ -626,7 +626,7 @@ function ReportingSourcesSettings({
             <input
               value={draft[field.key]}
               onChange={(event) => setDraft({ ...draft, [field.key]: event.target.value })}
-              placeholder="Tab name"
+              placeholder={field.key === "bulkCampaignTabName" ? "Comma-separated tab names" : "Tab name"}
               className="rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </label>
@@ -636,7 +636,7 @@ function ReportingSourcesSettings({
         {[
           ["Reporting Summary", "Optional but ideal: Start Date, End Date, Total Sales, Organic Sales, Ad Sales, Ad Spend, Impressions, Clicks, Orders, Sessions, Units Ordered."],
           ["Business Report", "Required for true total sales/TACOS: Parent ASIN, Child ASIN, Title, Sessions, Units Ordered, Ordered Product Sales, Total Order Items."],
-          ["Bulk Campaign Export", "Required for ads: Amazon bulk export with Entity, Campaign Name, Spend, Sales, Impressions, Clicks, Orders, CPC, ROAS, CTR, CVR."],
+          ["Bulk Campaign Export Tabs", "Required for ads: paste the Amazon bulk workbook tabs into this sheet, then list those tab names comma-separated. Use Sponsored Products Campaigns, Sponsored Brands Campaigns, SB Multi Ad Group Campaigns, Sponsored Display Campaigns, and search-term tabs."],
           ["Advertising Product Summary", "Recommended for SKU ad detail: Advertised SKU, Advertised ASIN, Spend, Total Sales, Impressions, Clicks, Orders."],
           ["Profit Matrix", "Required for costs: SKU, ASIN, Product Title, Price, COGS, ship-to-Amazon, storage, referral, fulfillment/FBA fees."],
           ["Fee Preview + Storage", "Recommended for fee accuracy: Amazon fee preview and monthly storage fee report tabs copied directly from Amazon."],
