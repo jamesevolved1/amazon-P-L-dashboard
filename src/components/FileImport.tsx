@@ -1,5 +1,7 @@
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, FolderOpen, Play, Sparkles, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
+import JSZip from "jszip";
+import * as XLSX from "xlsx";
 import { parseAmazonMasterWorkbook, parseAmazonReportBundle } from "../lib/excelParser";
 import { reportingStateFromUploadedFiles } from "../lib/reportingData";
 import type { ImportSummary, ProductSku, ReportingState } from "../types/models";
@@ -15,6 +17,14 @@ type ReportSlot = {
   description: string;
   required?: boolean;
   accepts: string;
+};
+
+type PackItem = {
+  id: string;
+  title: string;
+  helper: string;
+  slotIds: string[];
+  required?: boolean;
 };
 
 const reportSlots: ReportSlot[] = [
@@ -33,21 +43,99 @@ const reportSlots: ReportSlot[] = [
   },
 ];
 
+const packItems: PackItem[] = [
+  {
+    id: "master",
+    title: "Master workbook or COGS/P&L",
+    helper: "Profit Matrix / COGS with SKU, ASIN, title, price, unit cost, and manual fee overrides.",
+    slotIds: ["profit-matrix", "cogs"],
+    required: true,
+  },
+  {
+    id: "business",
+    title: "Business Report",
+    helper: "Child ASIN, sessions, units ordered, ordered product sales, and total order items.",
+    slotIds: ["business-report"],
+    required: true,
+  },
+  {
+    id: "bulk",
+    title: "Bulk Campaign Export",
+    helper: "The full Amazon Ads bulk workbook with campaign, targeting, product ad, and search-term tabs.",
+    slotIds: ["campaign-export"],
+    required: true,
+  },
+  {
+    id: "ads",
+    title: "Advertised Product Summary",
+    helper: "Advertised SKU/ASIN, spend, ad sales, impressions, clicks, orders.",
+    slotIds: ["advertised-products"],
+  },
+  {
+    id: "fees",
+    title: "Fee Preview",
+    helper: "Referral fee, FBA fulfillment fee, price, SKU/ASIN.",
+    slotIds: ["fee-preview"],
+  },
+  {
+    id: "storage",
+    title: "Storage Fees",
+    helper: "Monthly storage fee report by ASIN/FNSKU/SKU.",
+    slotIds: ["storage-fees"],
+  },
+];
+
 export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [dragging, setDragging] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [isBuilding, setIsBuilding] = useState(false);
+  const [isUnpacking, setIsUnpacking] = useState(false);
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
   const [buildState, setBuildState] = useState<"idle" | "success" | "error">("idle");
 
-  const sourceSlotIds = reportSlots.filter((slot) => slot.id !== "profit-matrix" && slot.id !== "campaign-export").map((slot) => slot.id);
+  const sourceSlotIds = ["business-report", "advertised-products", "fee-preview", "storage-fees", "cogs"];
   const stagedFileCount = Object.values(files).reduce((total, slotFiles) => total + slotFiles.length, 0);
   const hasSourceFiles = sourceSlotIds.some((id) => (files[id] ?? []).length > 0);
   const hasMasterWorkbook = (files["profit-matrix"] ?? []).length > 0;
   const masterFileName = files["profit-matrix"]?.[0]?.name ?? "";
   const masterIsCsv = masterFileName.toLowerCase().endsWith(".csv");
-  const canBuild = stagedFileCount > 0 && !isBuilding;
+  const canBuild = stagedFileCount > 0 && !isBuilding && !isUnpacking;
+  const foundPackItems = packItems.reduce<Record<string, boolean>>((acc, item) => {
+    acc[item.id] = item.slotIds.some((slotId) => (files[slotId] ?? []).length > 0);
+    return acc;
+  }, {});
+
+  const handleReportPackFiles = async (incoming: FileList | File[]) => {
+    const rawFiles = Array.from(incoming);
+    if (!rawFiles.length) return;
+    setIsUnpacking(true);
+    setBuildState("idle");
+    setSummary(null);
+    setBuildMessage("Reading report pack and detecting source reports...");
+    try {
+      const expandedFiles = (await Promise.all(rawFiles.map(expandFile))).flat();
+      const detectedEntries = await Promise.all(expandedFiles.map(async (file) => ({ file, slotId: await detectReportSlot(file) })));
+      const nextFiles = detectedEntries.reduce<Record<string, File[]>>((acc, entry) => {
+        if (!entry.slotId) return acc;
+        acc[entry.slotId] = [...(acc[entry.slotId] ?? []), entry.file];
+        return acc;
+      }, {});
+      setFiles(nextFiles);
+      const detectedCount = Object.values(nextFiles).reduce((count, slotFiles) => count + slotFiles.length, 0);
+      const undetected = detectedEntries.filter((entry) => !entry.slotId).map((entry) => entry.file.name);
+      setBuildMessage(
+        undetected.length
+          ? `Detected ${detectedCount} report files. Could not classify: ${undetected.slice(0, 4).join(", ")}${undetected.length > 4 ? ", and more" : ""}.`
+          : `Detected ${detectedCount} report files. Review the checklist, then click Submit & Build.`,
+      );
+    } catch (error) {
+      setBuildState("error");
+      setBuildMessage(error instanceof Error ? error.message : "Could not read the report pack.");
+    } finally {
+      setIsUnpacking(false);
+    }
+  };
 
   const handleFiles = (slot: ReportSlot, incoming: FileList | File[]) => {
     const nextFiles = Array.from(incoming);
@@ -106,12 +194,12 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
           </div>
           <h2 className="mt-2 text-xl font-bold text-ink">Upload the source reports</h2>
           <p className="mt-1 max-w-4xl text-sm leading-6 text-steel">
-            Drag in one XLSX master workbook, or stage individual CSV/XLSX reports, then click Submit & Build to normalize everything together.
+            Drop one zip file or a batch of reports. The app auto-detects the files, checks what it found, then builds the P&L and reporting dashboards.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="mr-1 flex items-center rounded-full bg-warm px-3 py-2 text-xs font-bold text-steel">
-            {stagedFileCount ? `${stagedFileCount} staged` : "No files staged"}
+            {isUnpacking ? "Reading pack..." : stagedFileCount ? `${stagedFileCount} staged` : "No files staged"}
           </div>
           <button
             type="button"
@@ -126,12 +214,41 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
             }`}
           >
             {buildState === "success" ? <CheckCircle2 className="h-3.5 w-3.5" /> : buildState === "error" ? <AlertTriangle className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-            {isBuilding ? "Building" : buildState === "success" ? "Imported" : buildState === "error" ? "Review Import" : "Submit & Build"}
+            {isBuilding ? "Building" : isUnpacking ? "Reading" : buildState === "success" ? "Imported" : buildState === "error" ? "Review Import" : "Submit & Build"}
           </button>
         </div>
       </div>
 
       {buildMessage ? <BuildStatusCard state={buildState} message={buildMessage} /> : null}
+
+      <ReportPackDropZone isDragging={dragging === "report-pack"} onDragState={setDragging} onFiles={handleReportPackFiles} />
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {packItems.map((item) => {
+          const found = foundPackItems[item.id];
+          return (
+            <div key={item.id} className={`rounded-lg border p-3 ${found ? "border-emerald-200 bg-emerald-50" : item.required ? "border-amber-200 bg-amber-50" : "border-line bg-warm/40"}`}>
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 rounded-full p-1 ${found ? "bg-emerald-600 text-white" : "bg-white text-steel"}`}>
+                  {found ? <CheckCircle2 className="h-4 w-4" /> : <FileSpreadsheet className="h-4 w-4" />}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-ink">
+                    {item.title}
+                    {item.required ? <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] uppercase tracking-wide text-white">Needed</span> : null}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-steel">{item.helper}</p>
+                  {found ? (
+                    <div className="mt-2 text-[11px] font-bold text-emerald-800">
+                      {item.slotIds.flatMap((slotId) => files[slotId] ?? []).map((file) => file.name).join(", ")}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {hasMasterWorkbook ? (
         <div className={`mt-4 rounded-lg border px-4 py-3 text-sm font-semibold ${masterIsCsv ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
@@ -141,7 +258,9 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+      <details className="mt-5 rounded-lg border border-line bg-white">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold text-ink">Manual upload slots</summary>
+      <div className="grid gap-3 border-t border-line p-4 lg:grid-cols-2">
         {reportSlots.map((slot) => (
           <ReportDropZone
             key={slot.id}
@@ -154,10 +273,54 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
           />
         ))}
       </div>
+      </details>
 
       {summary ? <ImportSummaryCard summary={summary} /> : null}
     </section>
   );
+}
+
+async function expandFile(file: File): Promise<File[]> {
+  if (!file.name.toLowerCase().endsWith(".zip")) return [file];
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const entries = Object.values(zip.files).filter((entry) => !entry.dir && /\.(xlsx|xls|csv)$/i.test(entry.name));
+  const files = await Promise.all(entries.map(async (entry) => {
+    const blob = await entry.async("blob");
+    const name = entry.name.split("/").pop() || entry.name;
+    return new File([blob], name, { type: blob.type || fileTypeFromName(name) });
+  }));
+  return files;
+}
+
+function fileTypeFromName(name: string) {
+  if (name.toLowerCase().endsWith(".csv")) return "text/csv";
+  return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+}
+
+async function detectReportSlot(file: File): Promise<string | null> {
+  const nameKey = file.name.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  const sheetNames = await readSheetNames(file);
+  const sheetKey = sheetNames.join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  const combined = `${nameKey} ${sheetKey}`;
+
+  if (combined.includes("bulk") || combined.includes("sponsored products campaigns") || combined.includes("sponsored display campaigns") || combined.includes("sp search term report")) return "campaign-export";
+  if ((combined.includes("master") || combined.includes("profit matrix")) && (combined.includes("business report") || combined.includes("fee preview") || combined.includes("advertising product"))) return "profit-matrix";
+  if (combined.includes("business report") || combined.includes("sales traffic")) return "business-report";
+  if (combined.includes("advertised product") || combined.includes("advertising product") || combined.includes("ad spend per sku")) return "advertised-products";
+  if (combined.includes("fee preview") || combined.includes("fba fees")) return "fee-preview";
+  if (combined.includes("storage fee") || combined.includes("monthly storage")) return "storage-fees";
+  if (combined.includes("cogs") || combined.includes("unit economics") || combined.includes("profit matrix")) return "cogs";
+  return null;
+}
+
+async function readSheetNames(file: File): Promise<string[]> {
+  if (file.name.toLowerCase().endsWith(".csv")) return [];
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    return workbook.SheetNames;
+  } catch {
+    return [];
+  }
 }
 
 function BuildStatusCard({ state, message }: { state: "idle" | "success" | "error"; message: string }) {
@@ -197,6 +360,73 @@ function BuildStatusCard({ state, message }: { state: "idle" | "success" | "erro
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ReportPackDropZone({
+  isDragging,
+  onDragState,
+  onFiles,
+}: {
+  isDragging: boolean;
+  onDragState: (id: string | null) => void;
+  onFiles: (files: FileList | File[]) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div
+      onDragOver={(event) => {
+        event.preventDefault();
+        onDragState("report-pack");
+      }}
+      onDragLeave={() => onDragState(null)}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDragState(null);
+        onFiles(event.dataTransfer.files);
+      }}
+      className={`mt-5 rounded-xl border-2 border-dashed p-6 transition ${
+        isDragging ? "border-brand bg-orange-50" : "border-[rgba(143,162,175,0.45)] bg-[#FAFAFA] hover:border-brand hover:bg-orange-50/40"
+      }`}
+    >
+      <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="flex items-start gap-4">
+          <div className="rounded-2xl bg-ink p-3 text-white">
+            <UploadCloud className="h-6 w-6" />
+          </div>
+          <div>
+            <h3 className="text-lg font-extrabold text-ink">Drop your client report pack here</h3>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
+              Upload one zip, or select multiple files at once. Include the master workbook or COGS/Profit Matrix, Business Report, Bulk Campaign Export, Fee Preview, and Storage report when available.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-steel">
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.zip</span>
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.xlsx</span>
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.csv</span>
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">multiple files</span>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-deep"
+        >
+          <FolderOpen className="h-4 w-4" />
+          Choose Pack
+        </button>
+      </div>
+      <input
+        ref={inputRef}
+        className="hidden"
+        type="file"
+        accept=".zip,.xlsx,.xls,.csv"
+        multiple
+        onChange={(event) => {
+          if (event.target.files) onFiles(event.target.files);
+        }}
+      />
     </div>
   );
 }
