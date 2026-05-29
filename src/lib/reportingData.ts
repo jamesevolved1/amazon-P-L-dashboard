@@ -10,11 +10,15 @@ import type {
 
 export const emptyReportingSourceConfig: ReportingSourceConfig = {
   masterSheetUrl: "",
+  profitMatrixTabName: "Profit Matrix",
+  bulkCampaignTabName: "Bulk Campaign Export",
   campaignTabName: "Campaign Report",
   productTabName: "Advertised Product Report",
   searchTermTabName: "Search Term Report",
   dailyTabName: "Daily Trend",
   businessTabName: "Business Report",
+  feePreviewTabName: "Fee Preview Report",
+  storageTabName: "Monthly Storage Fee Report",
   campaignCsvUrl: "",
   productCsvUrl: "",
   searchTermCsvUrl: "",
@@ -112,7 +116,7 @@ function googleSheetId(url: string) {
   return url.trim().match(/\/spreadsheets\/d\/([^/]+)/)?.[1] ?? "";
 }
 
-function tabCsvUrl(masterSheetUrl: string, tabName: string) {
+export function tabCsvUrl(masterSheetUrl: string, tabName: string) {
   const id = googleSheetId(masterSheetUrl);
   if (!id || !tabName.trim()) return "";
   return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName.trim())}`;
@@ -122,7 +126,7 @@ function sourceUrl(config: ReportingSourceConfig, key: keyof Pick<ReportingSourc
   return config.masterSheetUrl.trim() ? tabCsvUrl(config.masterSheetUrl, tabName) : config[key];
 }
 
-async function fetchRows(url: string): Promise<RawRow[]> {
+export async function fetchSheetRows(url: string): Promise<RawRow[]> {
   const normalizedUrl = normalizeGoogleSheetUrl(url);
   if (!normalizedUrl) return [];
   const response = await fetch(normalizedUrl);
@@ -131,6 +135,10 @@ async function fetchRows(url: string): Promise<RawRow[]> {
   const workbook = XLSX.read(csv, { type: "string" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   return XLSX.utils.sheet_to_json<RawRow>(sheet, { defval: "" });
+}
+
+async function fetchRows(url: string): Promise<RawRow[]> {
+  return fetchSheetRows(url);
 }
 
 function campaignFromRow(row: RawRow): ReportingCampaignRow {
@@ -385,9 +393,10 @@ export function normalizeReportingState(state?: Partial<ReportingState> | null):
 
 export async function refreshReportingFromSheets(config: ReportingSourceConfig): Promise<ReportingState> {
   const errors: string[] = [];
-  const [campaignRows, productRows, searchTermRows, dailyRows, businessRows] = await Promise.all(
+  const [campaignRows, bulkCampaignRows, productRows, searchTermRows, dailyRows, businessRows] = await Promise.all(
     ([
       ["Campaign report", sourceUrl(config, "campaignCsvUrl", config.campaignTabName)],
+      ["Bulk campaign export", config.masterSheetUrl.trim() && config.bulkCampaignTabName.trim() ? tabCsvUrl(config.masterSheetUrl, config.bulkCampaignTabName) : ""],
       ["Advertised product report", sourceUrl(config, "productCsvUrl", config.productTabName)],
       ["Search term report", sourceUrl(config, "searchTermCsvUrl", config.searchTermTabName)],
       ["Daily trend report", sourceUrl(config, "dailyCsvUrl", config.dailyTabName)],
@@ -404,14 +413,18 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
 
   const totalSalesByAsin = buildBusinessSalesLookup(businessRows);
   const daily = dailyRows.map(dailyFromRow).filter((row) => row.day !== "No date" || row.spend || row.sales);
+  const classifiedBulk = classifyRows([{ sheetName: config.bulkCampaignTabName, rows: bulkCampaignRows }]);
+  const normalizedCampaignRows = bulkCampaignRows.length ? classifiedBulk.campaignRows : campaignRows;
+  const normalizedProductRows = [...productRows, ...classifiedBulk.productRows];
+  const normalizedSearchRows = [...searchTermRows, ...classifiedBulk.searchTermRows];
   return {
     sourceConfig: config,
     lastRefreshedAt: new Date().toISOString(),
     accountTotalSales: businessTotalSales(businessRows),
-    campaigns: campaignRows.map(campaignFromRow).filter((row) => row.campaign !== "Unnamed campaign" || row.spend || row.sales),
-    products: productRows.map((row) => productFromRow(row, totalSalesByAsin)).filter((row) => row.product !== "Unnamed product" || row.spend || row.adSales),
-    searchTerms: searchTermRows.map(searchTermFromRow).filter((row) => row.searchTerm !== "Unnamed search term" || row.spend || row.sales),
-    daily: daily.length ? daily : dailyFromAdRows([...campaignRows, ...productRows, ...searchTermRows]),
+    campaigns: mergeCampaignRows(normalizedCampaignRows.map(campaignFromRow).filter((row) => row.campaign !== "Unnamed campaign" || row.spend || row.sales)),
+    products: mergeProductRows(normalizedProductRows.map((row) => productFromRow(row, totalSalesByAsin)).filter((row) => row.product !== "Unnamed product" || row.spend || row.adSales)),
+    searchTerms: normalizedSearchRows.map(searchTermFromRow).filter((row) => row.searchTerm !== "Unnamed search term" || row.spend || row.sales),
+    daily: daily.length ? daily : dailyFromAdRows([...normalizedCampaignRows, ...normalizedProductRows, ...normalizedSearchRows]),
     errors,
   };
 }

@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
-import type { ImportSummary, ProductSku } from "../types/models";
+import { fetchSheetRows, tabCsvUrl } from "./reportingData";
+import type { ImportSummary, ProductSku, ReportingSourceConfig } from "../types/models";
 
 type SourceFields = NonNullable<ProductSku["sourceFields"]>;
 
@@ -322,6 +323,49 @@ export async function parseAmazonReportBundle(filesBySlot: Record<string, File[]
   const storage = await rowsForSlot(filesBySlot, "storage-fees");
   const cogs = await rowsForSlot(filesBySlot, "cogs");
   return buildSkusFromSourceRows({ business, ads, fees, storage, cogs });
+}
+
+export async function parseAmazonGoogleSheet(config: ReportingSourceConfig): Promise<{
+  skus: ProductSku[];
+  warnings: string[];
+  summary?: ImportSummary;
+}> {
+  const errors: string[] = [];
+  const readTab = async (label: string, tabName: string) => {
+    if (!config.masterSheetUrl.trim() || !tabName.trim()) return [];
+    try {
+      return await fetchSheetRows(tabCsvUrl(config.masterSheetUrl, tabName));
+    } catch (error) {
+      errors.push(`${label}: ${error instanceof Error ? error.message : "Could not load tab."}`);
+      return [];
+    }
+  };
+  const [business, ads, fees, storage, cogs] = await Promise.all([
+    readTab("Business Report", config.businessTabName),
+    readTab("Advertising Product Summary", config.productTabName),
+    readTab("Fee Preview Report", config.feePreviewTabName),
+    readTab("Monthly Storage Fee Report", config.storageTabName),
+    readTab("Profit Matrix / COGS", config.profitMatrixTabName),
+  ]);
+  const result = buildSkusFromSourceRows({ business, ads, fees, storage, cogs });
+  return {
+    ...result,
+    warnings: [...errors, ...result.warnings],
+    summary: result.summary
+      ? {
+          ...result.summary,
+          mode: "master-workbook",
+          rowCounts: {
+            ...result.summary.rowCounts,
+            [`Sheet: ${config.businessTabName}`]: business.length,
+            [`Sheet: ${config.productTabName}`]: ads.length,
+            [`Sheet: ${config.feePreviewTabName}`]: fees.length,
+            [`Sheet: ${config.storageTabName}`]: storage.length,
+            [`Sheet: ${config.profitMatrixTabName}`]: cogs.length,
+          },
+        }
+      : result.summary,
+  };
 }
 
 function buildSkusFromSourceRows({ business, ads, fees, storage, cogs }: SourceReportRows): {

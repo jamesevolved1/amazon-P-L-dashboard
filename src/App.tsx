@@ -15,6 +15,7 @@ import { SkuProfitTable } from "./components/SkuProfitTable";
 import { TacosSnapshot } from "./components/TacosSnapshot";
 import { aggregateParentAsinPnl, calculatePortfolio } from "./lib/calculations";
 import { createCloudClient, deleteCloudClient, deleteCloudScenario, loadCloudState, saveCloudAdPotentialState, saveCloudReportingState, saveCloudScenario, saveCloudWorkspace, updateCloudClient } from "./lib/cloudStorage";
+import { parseAmazonGoogleSheet } from "./lib/excelParser";
 import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
 import { initialAdPotentialState } from "./lib/adPotentialCalculations";
@@ -250,36 +251,60 @@ export default function App({ session }: { session: SupabaseSession | null }) {
       <div className={`min-h-screen transition-[padding] duration-200 ${sidebarCollapsed ? "pl-[76px]" : "pl-[284px]"}`}>
       <main className="mx-auto grid max-w-[1720px] gap-5 px-6 py-4">
         {activeSection === "upload" ? (
-          <FileImport
-            onLoaded={(loadedSkus, importWarnings) => {
-              const importedAt = new Date().toISOString();
-              const stampedSkus = loadedSkus.map((sku) => ({ ...sku, importedAt }));
-              setWarnings(importWarnings);
-              setSelected(null);
-              if (!stampedSkus.length) return;
-              const nextSkuData = { ...clientSkuData, [activeClientId]: stampedSkus };
-              const nextWorkspaceWarnings = { ...workspaceWarnings, [activeClientId]: importWarnings };
-              setClientSkuData(nextSkuData);
-              setWorkspaceWarnings(nextWorkspaceWarnings);
-              saveClientSkuData(nextSkuData);
-              if (userId && activeClientId) {
-                setCloudStatus("Saving workspace...");
-                saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings, activeAdPotentialState)
-                  .then(() => setCloudStatus("Cloud saved"))
-                  .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
-              }
-            }}
-            onReportingLoaded={(loadedReportingState) => {
-              const nextReportingStates = { ...reportingStates, [activeClientId]: loadedReportingState };
-              setReportingStates(nextReportingStates);
-              saveReportingStates(nextReportingStates);
-              if (userId && activeClientId) {
-                saveCloudReportingState(userId, activeClientId, loadedReportingState)
-                  .then(() => setCloudStatus("Cloud saved"))
-                  .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
-              }
-            }}
-          />
+          <div className="grid gap-5">
+            <ReportingSourcesSettings
+              state={activeReportingState}
+              onStateChange={updateReportingState}
+              onBuildModel={(loadedSkus, importWarnings) => {
+                const importedAt = new Date().toISOString();
+                const stampedSkus = loadedSkus.map((sku) => ({ ...sku, importedAt }));
+                setWarnings(importWarnings);
+                setSelected(null);
+                if (!stampedSkus.length) return;
+                const nextSkuData = { ...clientSkuData, [activeClientId]: stampedSkus };
+                const nextWorkspaceWarnings = { ...workspaceWarnings, [activeClientId]: importWarnings };
+                setClientSkuData(nextSkuData);
+                setWorkspaceWarnings(nextWorkspaceWarnings);
+                saveClientSkuData(nextSkuData);
+                if (userId && activeClientId) {
+                  setCloudStatus("Saving workspace...");
+                  saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings, activeAdPotentialState)
+                    .then(() => setCloudStatus("Cloud saved"))
+                    .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
+                }
+              }}
+            />
+            <FileImport
+              onLoaded={(loadedSkus, importWarnings) => {
+                const importedAt = new Date().toISOString();
+                const stampedSkus = loadedSkus.map((sku) => ({ ...sku, importedAt }));
+                setWarnings(importWarnings);
+                setSelected(null);
+                if (!stampedSkus.length) return;
+                const nextSkuData = { ...clientSkuData, [activeClientId]: stampedSkus };
+                const nextWorkspaceWarnings = { ...workspaceWarnings, [activeClientId]: importWarnings };
+                setClientSkuData(nextSkuData);
+                setWorkspaceWarnings(nextWorkspaceWarnings);
+                saveClientSkuData(nextSkuData);
+                if (userId && activeClientId) {
+                  setCloudStatus("Saving workspace...");
+                  saveCloudWorkspace(userId, activeClientId, stampedSkus, importWarnings, activeAdPotentialState)
+                    .then(() => setCloudStatus("Cloud saved"))
+                    .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
+                }
+              }}
+              onReportingLoaded={(loadedReportingState) => {
+                const nextReportingStates = { ...reportingStates, [activeClientId]: loadedReportingState };
+                setReportingStates(nextReportingStates);
+                saveReportingStates(nextReportingStates);
+                if (userId && activeClientId) {
+                  saveCloudReportingState(userId, activeClientId, loadedReportingState)
+                    .then(() => setCloudStatus("Cloud saved"))
+                    .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
+                }
+              }}
+            />
+          </div>
         ) : null}
 
         {activeSection === "dashboard" ? (
@@ -507,23 +532,38 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   );
 }
 
-function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingState; onStateChange: (state: ReportingState) => void }) {
+function ReportingSourcesSettings({
+  state,
+  onStateChange,
+  onBuildModel,
+}: {
+  state: ReportingState;
+  onStateChange: (state: ReportingState) => void;
+  onBuildModel: (skus: ProductSku[], warnings: string[]) => void;
+}) {
   const [draft, setDraft] = useState({ ...emptyReportingSourceConfig, ...state.sourceConfig });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [submitState, setSubmitState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const tabFields: Array<{ key: keyof typeof draft; label: string }> = [
-    { key: "campaignTabName", label: "Campaign report tab" },
+    { key: "profitMatrixTabName", label: "Profit Matrix / COGS tab" },
+    { key: "bulkCampaignTabName", label: "Bulk campaign export tab" },
     { key: "productTabName", label: "Advertised product tab" },
     { key: "searchTermTabName", label: "Search term tab" },
-    { key: "dailyTabName", label: "Daily trend tab" },
     { key: "businessTabName", label: "Business report tab" },
+    { key: "feePreviewTabName", label: "Fee preview tab" },
+    { key: "storageTabName", label: "Storage fee tab" },
   ];
 
   const refresh = async () => {
     setIsRefreshing(true);
     setSubmitState("loading");
     try {
-      onStateChange(await refreshReportingFromSheets(draft));
+      const [reportingState, skuResult] = await Promise.all([
+        refreshReportingFromSheets(draft),
+        parseAmazonGoogleSheet(draft),
+      ]);
+      onStateChange(reportingState);
+      onBuildModel(skuResult.skus, skuResult.warnings);
       setSubmitState("success");
       window.setTimeout(() => setSubmitState("idle"), 1800);
     } catch (error) {
@@ -543,7 +583,7 @@ function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingSt
           <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Client Data Sources</div>
           <h2 className="mt-2 text-xl font-extrabold text-ink">One master Google Sheet</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
-            Paste one spreadsheet link for this client, confirm the tab names, then refresh the Reporting Dashboard whenever you update the sheet.
+            Paste one spreadsheet link for this client, confirm the tab names, then refresh P&L, reporting, and client KPIs from the sheet.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -577,9 +617,9 @@ function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingSt
           placeholder="https://docs.google.com/spreadsheets/d/.../edit"
           className="rounded-md border border-line bg-white px-3 py-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
         />
-        <span className="text-xs leading-5 text-steel">Use one workbook per client. The app reads the tabs below from this sheet.</span>
+        <span className="text-xs leading-5 text-steel">Set sharing to Anyone with the link: Viewer. Use one workbook per client; the app reads the tabs below from this sheet.</span>
       </label>
-      <div className="mt-5 grid gap-3 lg:grid-cols-5">
+      <div className="mt-5 grid gap-3 lg:grid-cols-3">
         {tabFields.map((field) => (
           <label key={field.key} className="grid gap-2">
             <span className="text-sm font-extrabold text-ink">{field.label}</span>
@@ -592,12 +632,27 @@ function ReportingSourcesSettings({ state, onStateChange }: { state: ReportingSt
           </label>
         ))}
       </div>
+      <div className="mt-5 grid gap-3 lg:grid-cols-3">
+        {[
+          ["Reporting Summary", "Optional but ideal: Start Date, End Date, Total Sales, Organic Sales, Ad Sales, Ad Spend, Impressions, Clicks, Orders, Sessions, Units Ordered."],
+          ["Business Report", "Required for true total sales/TACOS: Parent ASIN, Child ASIN, Title, Sessions, Units Ordered, Ordered Product Sales, Total Order Items."],
+          ["Bulk Campaign Export", "Required for ads: Amazon bulk export with Entity, Campaign Name, Spend, Sales, Impressions, Clicks, Orders, CPC, ROAS, CTR, CVR."],
+          ["Advertising Product Summary", "Recommended for SKU ad detail: Advertised SKU, Advertised ASIN, Spend, Total Sales, Impressions, Clicks, Orders."],
+          ["Profit Matrix", "Required for costs: SKU, ASIN, Product Title, Price, COGS, ship-to-Amazon, storage, referral, fulfillment/FBA fees."],
+          ["Fee Preview + Storage", "Recommended for fee accuracy: Amazon fee preview and monthly storage fee report tabs copied directly from Amazon."],
+        ].map(([title, description]) => (
+          <div key={title} className="rounded-lg border border-line bg-warm/50 p-3">
+            <div className="text-sm font-extrabold text-ink">{title}</div>
+            <p className="mt-1 text-xs leading-5 text-steel">{description}</p>
+          </div>
+        ))}
+      </div>
       <div className={`mt-5 rounded-lg border p-4 text-sm transition-all duration-500 ${
         submitState === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : submitState === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-line bg-warm/50 text-steel"
       }`}>
         <div className="flex items-center gap-2 font-extrabold">
           {submitState === "success" ? <CheckCircle2 className="h-5 w-5" /> : <FileSpreadsheet className="h-5 w-5" />}
-          {submitState === "success" ? "Sheet accepted. Reporting dashboard rebuilt." : "Ready for one-sheet reporting."}
+          {submitState === "success" ? "Sheet accepted. P&L and reporting rebuilt." : "Ready for one-sheet reporting and P&L."}
         </div>
         <div className="mt-1">
         Last refreshed: <strong className="text-ink">{state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Not refreshed yet"}</strong>
