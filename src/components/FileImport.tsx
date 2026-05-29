@@ -374,6 +374,7 @@ function ReportPackDropZone({
   onFiles: (files: FileList | File[]) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   return (
     <div
       onDragOver={(event) => {
@@ -398,30 +399,54 @@ function ReportPackDropZone({
           <div>
             <h3 className="text-lg font-extrabold text-ink">Drop your client report pack here</h3>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-steel">
-              Upload one zip, or select multiple files at once. Include the master workbook or COGS/Profit Matrix, Business Report, Bulk Campaign Export, Fee Preview, and Storage report when available.
+              Upload one zip, choose the whole report-pack folder, or select the master workbook and bulk campaign workbook together.
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-steel">
               <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.zip</span>
               <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.xlsx</span>
               <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">.csv</span>
+              <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">folder</span>
               <span className="rounded-full bg-white px-3 py-1 ring-1 ring-line">multiple files</span>
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-deep"
-        >
-          <FolderOpen className="h-4 w-4" />
-          Choose Pack
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-deep"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Choose Files
+          </button>
+          <button
+            type="button"
+            onClick={() => folderInputRef.current?.click()}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-ink ring-1 ring-line transition hover:-translate-y-0.5 hover:border-brand hover:text-brand"
+          >
+            <FolderOpen className="h-4 w-4" />
+            Choose Folder
+          </button>
+        </div>
       </div>
       <input
         ref={inputRef}
         className="hidden"
         type="file"
         accept=".zip,.xlsx,.xls,.csv"
+        multiple
+        onChange={(event) => {
+          if (event.target.files) onFiles(event.target.files);
+        }}
+      />
+      <input
+        ref={(element) => {
+          folderInputRef.current = element;
+          element?.setAttribute("webkitdirectory", "");
+          element?.setAttribute("directory", "");
+        }}
+        className="hidden"
+        type="file"
         multiple
         onChange={(event) => {
           if (event.target.files) onFiles(event.target.files);
