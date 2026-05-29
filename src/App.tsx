@@ -269,6 +269,16 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                   .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
               }
             }}
+            onReportingLoaded={(loadedReportingState) => {
+              const nextReportingStates = { ...reportingStates, [activeClientId]: loadedReportingState };
+              setReportingStates(nextReportingStates);
+              saveReportingStates(nextReportingStates);
+              if (userId && activeClientId) {
+                saveCloudReportingState(userId, activeClientId, loadedReportingState)
+                  .then(() => setCloudStatus("Cloud saved"))
+                  .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
+              }
+            }}
           />
         ) : null}
 

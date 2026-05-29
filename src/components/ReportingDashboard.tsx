@@ -116,10 +116,23 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
     const hasImportedData = state.campaigns.length || state.products.length || state.daily.length;
     return hasImportedData ? state : sampleState;
   }, [state]);
-  const campaignData = rows.campaigns.length ? rows.campaigns : sampleState.campaigns;
-  const productData = rows.products.length ? rows.products : sampleState.products;
-  const dailyData = rows.daily.length ? rows.daily : sampleState.daily;
-  const totals = campaignData.reduce(
+  const hasImportedRows = rows !== sampleState;
+  const campaignData = rows.campaigns;
+  const productData = rows.products;
+  const baseAdRows = campaignData.length
+    ? campaignData
+    : productData.map((row) => ({
+        campaign: row.product,
+        type: "Advertised Products",
+        spend: row.spend,
+        sales: row.adSales,
+        impressions: row.impressions,
+        clicks: row.clicks,
+        orders: row.orders,
+        budget: 0,
+        status: "Imported",
+      }));
+  const totals = baseAdRows.reduce(
     (acc, row) => ({
       spend: acc.spend + row.spend,
       sales: acc.sales + row.sales,
@@ -129,6 +142,12 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
     }),
     { spend: 0, sales: 0, impressions: 0, clicks: 0, orders: 0 },
   );
+  const totalSales = productData.length ? productData.reduce((sum, row) => sum + (row.totalSales || row.adSales), 0) : totals.sales;
+  const dailyData = rows.daily.length
+    ? rows.daily
+    : hasImportedRows
+      ? [{ day: "Imported", spend: totals.spend, sales: totals.sales, impressions: totals.impressions, clicks: totals.clicks, orders: totals.orders }]
+      : sampleState.daily;
   const acos = totals.sales ? totals.spend / totals.sales : 0;
   const roas = totals.spend ? totals.sales / totals.spend : 0;
   const ctr = totals.impressions ? totals.clicks / totals.impressions : 0;
@@ -136,8 +155,8 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const conversionRate = totals.clicks ? totals.orders / totals.clicks : 0;
   const hasImportedData = Boolean(state.lastRefreshedAt);
   const refreshedLabel = state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Using sample data";
-  const topCampaigns = [...campaignData].sort((a, b) => b.sales - a.sales).slice(0, 5);
-  const weakCampaigns = [...campaignData].sort((a, b) => (b.sales ? b.spend / b.sales : 999) - (a.sales ? a.spend / a.sales : 999)).slice(0, 5);
+  const topCampaigns = [...baseAdRows].sort((a, b) => b.sales - a.sales).slice(0, 5);
+  const weakCampaigns = [...baseAdRows].sort((a, b) => (b.sales ? b.spend / b.sales : 999) - (a.sales ? a.spend / a.sales : 999)).slice(0, 5);
 
   const refreshSheets = async () => {
     setIsRefreshing(true);
@@ -192,7 +211,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         <div className="grid gap-4 bg-[#F1F4F8] p-5 md:grid-cols-2 xl:grid-cols-5">
           <ReportMetric label="Impressions" value={number(totals.impressions)} delta="+2.3%" tone="neutral" />
           <ReportMetric label="Clicks" value={number(totals.clicks)} delta="+6.6%" tone="good" />
-          <ReportMetric label="Total Sales" value={currency(totals.sales)} delta="+12.7%" tone="good" />
+          <ReportMetric label="Total Sales" value={currency(totalSales)} delta="+12.7%" tone="good" />
           <ReportMetric label="Ad Spend" value={currency(totals.spend)} delta="-12.7%" tone="bad" />
           <ReportMetric label="Ad Sales" value={currency(totals.sales)} delta="+12.7%" tone="good" />
           <ReportMetric label="ROAS" value={`${roas.toFixed(1)}x`} delta="+0.4x" tone="good" />

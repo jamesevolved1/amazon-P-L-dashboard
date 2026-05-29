@@ -1,10 +1,12 @@
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, FolderOpen, Play, Sparkles, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 import { parseAmazonMasterWorkbook, parseAmazonReportBundle } from "../lib/excelParser";
-import type { ImportSummary, ProductSku } from "../types/models";
+import { reportingStateFromUploadedFiles } from "../lib/reportingData";
+import type { ImportSummary, ProductSku, ReportingState } from "../types/models";
 
 interface FileImportProps {
   onLoaded: (skus: ProductSku[], warnings: string[]) => void;
+  onReportingLoaded?: (state: ReportingState) => void;
 }
 
 type ReportSlot = {
@@ -31,7 +33,7 @@ const reportSlots: ReportSlot[] = [
   },
 ];
 
-export function FileImport({ onLoaded }: FileImportProps) {
+export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [dragging, setDragging] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
@@ -73,6 +75,9 @@ export function FileImport({ onLoaded }: FileImportProps) {
           : { skus: [], warnings: ["Stage at least one master workbook or the separate source reports before building the SKU model."], summary: undefined };
 
       onLoaded(result.skus, result.warnings);
+      if (result.skus.length && onReportingLoaded) {
+        onReportingLoaded(await reportingStateFromUploadedFiles(files, result.skus));
+      }
       setSummary(result.summary ?? null);
       if (!result.skus.length) {
         setBuildState("error");

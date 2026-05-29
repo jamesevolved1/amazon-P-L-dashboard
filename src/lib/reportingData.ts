@@ -40,11 +40,11 @@ const headerAliases = {
   status: ["status", "state", "campaign status"],
   budget: ["budget", "campaign budget", "daily budget"],
   spend: ["spend", "cost", "total spend", "ad spend"],
-  sales: ["sales", "ad sales", "attributed sales", "14 day total sales", "sales within 14 days of ad click", "7 day total sales"],
+  sales: ["sales", "ad sales", "attributed sales", "14 day total sales", "sales 14d", "sales within 14 days of ad click", "7 day total sales", "7 day total sales usd", "14 day total sales usd"],
   totalSales: ["total sales", "ordered product sales", "ordered product sales - total", "sales"],
   impressions: ["impressions", "impr"],
   clicks: ["clicks"],
-  orders: ["orders", "purchases", "total orders", "14 day total orders", "7 day total orders"],
+  orders: ["orders", "purchases", "total orders", "14 day total orders", "orders 14d", "7 day total orders", "7 day total orders #", "14 day total orders #"],
   date: ["date", "day", "start date"],
   product: ["product", "product title", "advertised product", "title"],
   asin: ["asin", "advertised asin", "child asin"],
@@ -66,8 +66,18 @@ function rowLookup(row: RawRow) {
 function pick(row: RawRow, aliases: string[]) {
   const normalized = rowLookup(row);
   for (const alias of aliases) {
-    const value = normalized[cleanHeader(alias)];
+    const aliasKey = cleanHeader(alias);
+    const value = normalized[aliasKey];
     if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+  }
+  for (const [header, value] of Object.entries(normalized)) {
+    if (value === undefined || value === null || String(value).trim() === "") continue;
+    if (aliases.some((alias) => {
+      const aliasKey = cleanHeader(alias);
+      return aliasKey.length > 3 && (header.includes(aliasKey) || aliasKey.includes(header));
+    })) {
+      return value;
+    }
   }
   return "";
 }
@@ -201,6 +211,146 @@ function buildBusinessSalesLookup(rows: RawRow[]) {
     if (asin) acc[asin] = (acc[asin] ?? 0) + amount(row, headerAliases.totalSales);
     return acc;
   }, {});
+}
+
+function sheetRows(workbook: XLSX.WorkBook, sheetName: string): RawRow[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+  const headerIndex = matrix.findIndex((row) => {
+    const headers = row.map((value) => cleanHeader(String(value ?? "")));
+    return headers.includes("campaign") ||
+      headers.includes("campaign name") ||
+      headers.includes("advertised asin") ||
+      headers.includes("child asin") ||
+      headers.includes("search term") ||
+      headers.includes("customer search term") ||
+      headers.includes("date");
+  });
+  if (headerIndex < 0) return [];
+  const headers = matrix[headerIndex].map((value, index) => String(value || `Column ${index + 1}`));
+  return matrix.slice(headerIndex + 1).map((row) =>
+    headers.reduce<RawRow>((acc, header, index) => {
+      acc[header] = row[index] ?? "";
+      return acc;
+    }, {}),
+  );
+}
+
+async function workbookRowsFromFile(file: File): Promise<Array<{ sheetName: string; rows: RawRow[] }>> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  return workbook.SheetNames.map((sheetName) => ({ sheetName, rows: sheetRows(workbook, sheetName) })).filter((sheet) => sheet.rows.length);
+}
+
+function rowHas(row: RawRow, aliases: string[]) {
+  return pick(row, aliases) !== "";
+}
+
+function classifyRows(sheets: Array<{ sheetName: string; rows: RawRow[] }>) {
+  const campaignRows: RawRow[] = [];
+  const productRows: RawRow[] = [];
+  const searchTermRows: RawRow[] = [];
+  const dailyRows: RawRow[] = [];
+  const businessRows: RawRow[] = [];
+
+  sheets.forEach(({ sheetName, rows }) => {
+    const name = cleanHeader(sheetName);
+    rows.forEach((row) => {
+      const hasSpend = rowHas(row, headerAliases.spend);
+      const hasSales = rowHas(row, headerAliases.sales) || rowHas(row, headerAliases.totalSales);
+      const hasCampaign = rowHas(row, headerAliases.campaign);
+      const hasAsin = rowHas(row, headerAliases.asin);
+      const hasSearchTerm = rowHas(row, headerAliases.searchTerm);
+      const hasDate = rowHas(row, headerAliases.date);
+      const hasBusinessSignal = rowHas(row, headerAliases.totalSales) && (name.includes("business") || name.includes("sales traffic") || hasAsin);
+
+      if (hasBusinessSignal && !hasSpend) businessRows.push(row);
+      if (hasSearchTerm && hasSpend) searchTermRows.push(row);
+      if (hasCampaign && hasSpend) campaignRows.push(row);
+      if (hasAsin && hasSpend) productRows.push(row);
+      if (hasDate && (hasSpend || hasSales)) dailyRows.push(row);
+    });
+  });
+
+  return { campaignRows, productRows, searchTermRows, dailyRows, businessRows };
+}
+
+function mergeCampaignRows(rows: ReportingCampaignRow[]) {
+  const groups = new Map<string, ReportingCampaignRow>();
+  rows.forEach((row) => {
+    const key = `${row.campaign}__${row.type}`;
+    const current = groups.get(key) ?? { ...row, spend: 0, sales: 0, impressions: 0, clicks: 0, orders: 0, budget: row.budget };
+    current.spend += row.spend;
+    current.sales += row.sales;
+    current.impressions += row.impressions;
+    current.clicks += row.clicks;
+    current.orders += row.orders;
+    current.budget = current.budget || row.budget;
+    current.status = row.status || current.status;
+    groups.set(key, current);
+  });
+  return [...groups.values()].filter((row) => row.spend || row.sales || row.impressions || row.clicks);
+}
+
+function mergeProductRows(rows: ReportingProductRow[]) {
+  const groups = new Map<string, ReportingProductRow>();
+  rows.forEach((row) => {
+    const key = row.sku || row.asin || row.product;
+    const current = groups.get(key) ?? { ...row, spend: 0, adSales: 0, totalSales: row.totalSales, impressions: 0, clicks: 0, orders: 0 };
+    current.spend += row.spend;
+    current.adSales += row.adSales;
+    current.totalSales = Math.max(current.totalSales, row.totalSales);
+    current.impressions += row.impressions;
+    current.clicks += row.clicks;
+    current.orders += row.orders;
+    groups.set(key, current);
+  });
+  return [...groups.values()].filter((row) => row.spend || row.adSales || row.totalSales || row.impressions || row.clicks);
+}
+
+export async function reportingStateFromUploadedFiles(filesBySlot: Record<string, File[]>, skuRows: Array<{ asin: string; sku: string; title: string; totalSales: number; adSpend: number; unitsSold: number }>): Promise<ReportingState> {
+  const files = [...(filesBySlot["profit-matrix"] ?? []), ...(filesBySlot["campaign-export"] ?? [])];
+  const sheets = (await Promise.all(files.map(workbookRowsFromFile))).flat();
+  const { campaignRows, productRows, searchTermRows, dailyRows, businessRows } = classifyRows(sheets);
+  const totalSalesByAsin = {
+    ...skuRows.reduce<Record<string, number>>((acc, sku) => {
+      if (sku.asin) acc[sku.asin] = (acc[sku.asin] ?? 0) + sku.totalSales;
+      return acc;
+    }, {}),
+    ...buildBusinessSalesLookup(businessRows),
+  };
+
+  const productsFromSkuRows = skuRows.map<ReportingProductRow>((sku) => ({
+    product: sku.title || sku.asin || sku.sku || "Unnamed product",
+    asin: sku.asin,
+    sku: sku.sku,
+    spend: sku.adSpend,
+    adSales: totalSalesByAsin[sku.asin] ?? sku.totalSales,
+    totalSales: sku.totalSales,
+    impressions: 0,
+    clicks: 0,
+    orders: sku.unitsSold,
+  }));
+  const products = mergeProductRows([
+    ...productRows.map((row) => productFromRow(row, totalSalesByAsin)),
+    ...productsFromSkuRows,
+  ]);
+  const campaigns = mergeCampaignRows(campaignRows.map(campaignFromRow));
+  const searchTerms = searchTermRows.map(searchTermFromRow).filter((row) => row.spend || row.sales || row.impressions || row.clicks);
+  const daily = dailyRows.length
+    ? dailyRows.map(dailyFromRow).filter((row) => row.day !== "No date" || row.spend || row.sales)
+    : dailyFromAdRows([...campaignRows, ...productRows, ...searchTermRows]);
+
+  return {
+    sourceConfig: emptyReportingSourceConfig,
+    lastRefreshedAt: new Date().toISOString(),
+    campaigns,
+    products,
+    searchTerms,
+    daily,
+    errors: sheets.length ? [] : ["No reporting rows were found in the uploaded master workbook or campaign export."],
+  };
 }
 
 export function normalizeReportingState(state?: Partial<ReportingState> | null): ReportingState {
