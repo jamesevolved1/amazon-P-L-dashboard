@@ -142,7 +142,12 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
     }),
     { spend: 0, sales: 0, impressions: 0, clicks: 0, orders: 0 },
   );
-  const totalSales = productData.length ? productData.reduce((sum, row) => sum + (row.totalSales || row.adSales), 0) : totals.sales;
+  const totalSales =
+    state.accountTotalSales && state.accountTotalSales > 0
+      ? state.accountTotalSales
+      : productData.length
+        ? productData.reduce((sum, row) => sum + (row.totalSales || 0), 0)
+        : totals.sales;
   const dailyData = rows.daily.length
     ? rows.daily
     : hasImportedRows

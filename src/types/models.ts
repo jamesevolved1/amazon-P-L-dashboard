@@ -341,6 +341,7 @@ export interface ReportingDailyRow {
 export interface ReportingState {
   sourceConfig: ReportingSourceConfig;
   lastRefreshedAt: string | null;
+  accountTotalSales?: number;
   campaigns: ReportingCampaignRow[];
   products: ReportingProductRow[];
   searchTerms: ReportingSearchTermRow[];

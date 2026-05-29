@@ -25,6 +25,7 @@ export const emptyReportingSourceConfig: ReportingSourceConfig = {
 export const emptyReportingState: ReportingState = {
   sourceConfig: emptyReportingSourceConfig,
   lastRefreshedAt: null,
+  accountTotalSales: 0,
   campaigns: [],
   products: [],
   searchTerms: [],
@@ -213,6 +214,10 @@ function buildBusinessSalesLookup(rows: RawRow[]) {
   }, {});
 }
 
+function businessTotalSales(rows: RawRow[]) {
+  return rows.reduce((sum, row) => sum + amount(row, headerAliases.totalSales), 0);
+}
+
 function sheetRows(workbook: XLSX.WorkBook, sheetName: string): RawRow[] {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
@@ -320,13 +325,14 @@ export async function reportingStateFromUploadedFiles(filesBySlot: Record<string
     }, {}),
     ...buildBusinessSalesLookup(businessRows),
   };
+  const accountTotalSales = businessTotalSales(businessRows) || skuRows.reduce((sum, sku) => sum + sku.totalSales, 0);
 
   const productsFromSkuRows = skuRows.map<ReportingProductRow>((sku) => ({
     product: sku.title || sku.asin || sku.sku || "Unnamed product",
     asin: sku.asin,
     sku: sku.sku,
     spend: sku.adSpend,
-    adSales: totalSalesByAsin[sku.asin] ?? sku.totalSales,
+    adSales: 0,
     totalSales: sku.totalSales,
     impressions: 0,
     clicks: 0,
@@ -345,6 +351,7 @@ export async function reportingStateFromUploadedFiles(filesBySlot: Record<string
   return {
     sourceConfig: emptyReportingSourceConfig,
     lastRefreshedAt: new Date().toISOString(),
+    accountTotalSales,
     campaigns,
     products,
     searchTerms,
@@ -358,6 +365,7 @@ export function normalizeReportingState(state?: Partial<ReportingState> | null):
     ...emptyReportingState,
     ...state,
     sourceConfig: { ...emptyReportingSourceConfig, ...(state?.sourceConfig ?? {}) },
+    accountTotalSales: state?.accountTotalSales ?? 0,
     campaigns: state?.campaigns ?? [],
     products: state?.products ?? [],
     searchTerms: state?.searchTerms ?? [],
@@ -390,6 +398,7 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
   return {
     sourceConfig: config,
     lastRefreshedAt: new Date().toISOString(),
+    accountTotalSales: businessTotalSales(businessRows),
     campaigns: campaignRows.map(campaignFromRow).filter((row) => row.campaign !== "Unnamed campaign" || row.spend || row.sales),
     products: productRows.map((row) => productFromRow(row, totalSalesByAsin)).filter((row) => row.product !== "Unnamed product" || row.spend || row.adSales),
     searchTerms: searchTermRows.map(searchTermFromRow).filter((row) => row.searchTerm !== "Unnamed search term" || row.spend || row.sales),
