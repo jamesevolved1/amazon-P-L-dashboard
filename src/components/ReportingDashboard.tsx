@@ -155,6 +155,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
       : sampleState.daily;
   const acos = totals.sales ? totals.spend / totals.sales : 0;
   const roas = totals.spend ? totals.sales / totals.spend : 0;
+  const accountTacos = totalSales ? totals.spend / totalSales : 0;
   const ctr = totals.impressions ? totals.clicks / totals.impressions : 0;
   const cpc = totals.clicks ? totals.spend / totals.clicks : 0;
   const conversionRate = totals.clicks ? totals.orders / totals.clicks : 0;
@@ -213,12 +214,13 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           </div>
         </div>
 
-        <div className="grid gap-4 bg-[#F1F4F8] p-5 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 bg-[#F1F4F8] p-5 md:grid-cols-2 xl:grid-cols-6">
           <ReportMetric label="Impressions" value={number(totals.impressions)} delta="+2.3%" tone="neutral" />
           <ReportMetric label="Clicks" value={number(totals.clicks)} delta="+6.6%" tone="good" />
           <ReportMetric label="Total Sales" value={currency(totalSales)} delta="+12.7%" tone="good" />
           <ReportMetric label="Ad Spend" value={currency(totals.spend)} delta="-12.7%" tone="bad" />
           <ReportMetric label="Ad Sales" value={currency(totals.sales)} delta="+12.7%" tone="good" />
+          <ReportMetric label="Account TACOS" value={percent(accountTacos)} delta="Spend / total sales" tone="neutral" />
           <ReportMetric label="ROAS" value={`${roas.toFixed(1)}x`} delta="+0.4x" tone="good" />
           <ReportMetric label="CTR" value={percent(ctr)} delta="+0.8pp" tone="good" />
           <ReportMetric label="Orders" value={number(totals.orders)} delta="+4.1%" tone="good" />
