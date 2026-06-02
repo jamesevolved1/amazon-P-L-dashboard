@@ -207,6 +207,7 @@ export interface OptimizationTask {
   timing?: string;
   title: string;
   completed: boolean;
+  completedAt?: string | null;
 }
 
 export interface OptimizationScheduleState {

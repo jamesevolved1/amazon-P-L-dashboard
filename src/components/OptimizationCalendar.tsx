@@ -1,4 +1,4 @@
-import { CalendarCheck, CheckCircle2, Clock3, FileSpreadsheet, RotateCcw, UploadCloud } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Clock3, FileSpreadsheet, History, RotateCcw, UploadCloud } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { initialOptimizationScheduleState, normalizeOptimizationScheduleState, parseOptimizationScheduleFile, updateOptimizationTask } from "../lib/optimizationSchedule";
 import type { OptimizationCadence, OptimizationScheduleState } from "../types/models";
@@ -31,10 +31,18 @@ export function OptimizationCalendar({
   const schedule = normalizeOptimizationScheduleState(state);
   const completed = schedule.tasks.filter((task) => task.completed).length;
   const progress = schedule.tasks.length ? completed / schedule.tasks.length : 0;
+  const recentlyCompleted = useMemo(
+    () =>
+      schedule.tasks
+        .filter((task) => task.completed && task.completedAt)
+        .sort((a, b) => new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime())
+        .slice(0, 8),
+    [schedule.tasks],
+  );
   const grouped = useMemo(
     () =>
       (Object.keys(cadenceLabels) as OptimizationCadence[]).map((cadence) => {
-        const tasks = schedule.tasks.filter((task) => task.cadence === cadence);
+        const tasks = sortOptimizationTasks(schedule.tasks.filter((task) => task.cadence === cadence));
         const done = tasks.filter((task) => task.completed).length;
         return { cadence, tasks, done, progress: tasks.length ? done / tasks.length : 0 };
       }),
@@ -116,6 +124,29 @@ export function OptimizationCalendar({
         </div>
       ) : null}
 
+      {recentlyCompleted.length ? (
+        <div className="rounded-lg border border-line bg-white p-4 shadow-card">
+          <div className="flex items-center gap-2">
+            <History className="h-5 w-5 text-brand" />
+            <h3 className="text-lg font-extrabold text-ink">Recently Completed</h3>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {recentlyCompleted.map((task) => (
+              <div key={task.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <div className="text-sm font-extrabold text-ink">{task.title}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-emerald-900">
+                  <span>{cadenceLabels[task.cadence]}</span>
+                  <span>/</span>
+                  <span>{task.category}</span>
+                  <span>/</span>
+                  <span>{formatCompletedAt(task.completedAt)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 xl:grid-cols-2">
         {grouped.map(({ cadence, tasks, done, progress }) => (
           <div key={cadence} className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
@@ -155,6 +186,12 @@ export function OptimizationCalendar({
                           {task.timing}
                         </span>
                       ) : null}
+                      {task.completedAt ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-200">
+                          <CheckCircle2 className="h-3 w-3" />
+                          {formatCompletedAt(task.completedAt)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   {task.completed ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" /> : null}
@@ -176,6 +213,29 @@ export function OptimizationCalendar({
       </div>
     </section>
   );
+}
+
+function sortOptimizationTasks<T extends { title: string }>(tasks: T[]): T[] {
+  return [...tasks].sort((a, b) => {
+    const aDeepDive = isDeepDiveTask(a.title);
+    const bDeepDive = isDeepDiveTask(b.title);
+    if (aDeepDive !== bDeepDive) return aDeepDive ? -1 : 1;
+    return 0;
+  });
+}
+
+function isDeepDiveTask(title: string) {
+  return title.trim().toLowerCase() === "complete ad account deep dive";
+}
+
+function formatCompletedAt(value?: string | null) {
+  if (!value) return "Not completed";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function SummaryCard({ label, value, helper, good }: { label: string; value: string; helper: string; good?: boolean }) {

@@ -32,7 +32,7 @@ const defaultTasks: Array<Omit<OptimizationTask, "id" | "completed">> = [
 ];
 
 export const initialOptimizationScheduleState: OptimizationScheduleState = {
-  tasks: defaultTasks.map((task) => ({ ...task, id: taskId(task.cadence, task.category, task.timing, task.title), completed: false })),
+  tasks: defaultTasks.map((task) => ({ ...task, id: taskId(task.cadence, task.category, task.timing, task.title), completed: false, completedAt: null })),
   importedAt: null,
   sourceName: "Default optimization framework",
 };
@@ -58,6 +58,7 @@ export function normalizeOptimizationScheduleState(state?: Partial<OptimizationS
         timing: task.timing || undefined,
         title: task.title,
         completed: Boolean(task.completed),
+        completedAt: task.completed ? task.completedAt ?? null : null,
       })),
   };
 }
@@ -68,6 +69,7 @@ export async function parseOptimizationScheduleFile(file: File): Promise<Optimiz
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
   const tasks: OptimizationTask[] = [];
   let category = "Optimization";
+  const importedAt = new Date().toISOString();
 
   rows.forEach((row) => {
     const maybeCategory = text(row[1]);
@@ -88,6 +90,7 @@ export async function parseOptimizationScheduleFile(file: File): Promise<Optimiz
         timing: timing || undefined,
         title,
         completed,
+        completedAt: completed ? importedAt : null,
       });
     });
   });
@@ -102,7 +105,15 @@ export async function parseOptimizationScheduleFile(file: File): Promise<Optimiz
 export function updateOptimizationTask(state: OptimizationScheduleState, taskIdToUpdate: string, completed: boolean): OptimizationScheduleState {
   return {
     ...state,
-    tasks: state.tasks.map((task) => (task.id === taskIdToUpdate ? { ...task, completed } : task)),
+    tasks: state.tasks.map((task) =>
+      task.id === taskIdToUpdate
+        ? {
+            ...task,
+            completed,
+            completedAt: completed ? new Date().toISOString() : null,
+          }
+        : task,
+    ),
   };
 }
 
