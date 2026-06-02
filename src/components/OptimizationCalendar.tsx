@@ -28,7 +28,9 @@ export function OptimizationCalendar({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [message, setMessage] = useState("");
+  const [workDate, setWorkDate] = useState(() => toDateInputValue(new Date()));
   const schedule = normalizeOptimizationScheduleState(state);
+  const workDateTimestamp = toWorkDateTimestamp(workDate);
   const completed = schedule.tasks.filter((task) => task.completed).length;
   const progress = schedule.tasks.length ? completed / schedule.tasks.length : 0;
   const completionEvents = useMemo(() => getCompletionEvents(schedule.tasks), [schedule.tasks]);
@@ -69,7 +71,16 @@ export function OptimizationCalendar({
                 Active client: {clientName}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="rounded-md bg-white/10 px-3 py-2">
+                <span className="block text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/55">Work Date</span>
+                <input
+                  type="date"
+                  value={workDate}
+                  onChange={(event) => setWorkDate(event.target.value)}
+                  className="mt-1 bg-transparent text-sm font-extrabold text-white outline-none [color-scheme:dark]"
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
@@ -147,14 +158,14 @@ export function OptimizationCalendar({
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => onChange(logOptimizationTaskCompletion(schedule, deepDiveTask.id))}
+                    onClick={() => onChange(logOptimizationTaskCompletion(schedule, deepDiveTask.id, workDateTimestamp))}
                     className="rounded-md bg-brand px-4 py-2 text-sm font-extrabold text-white transition hover:bg-deep"
                   >
-                    Log Deep Dive Today
+                    Log Deep Dive
                   </button>
                   <button
                     type="button"
-                    onClick={() => onChange(updateOptimizationTask(schedule, deepDiveTask.id, !deepDiveTask.completed))}
+                    onClick={() => onChange(updateOptimizationTask(schedule, deepDiveTask.id, !deepDiveTask.completed, workDateTimestamp))}
                     className="rounded-md border border-line bg-white px-4 py-2 text-sm font-extrabold text-ink transition hover:border-brand"
                   >
                     {deepDiveTask.completed ? "Reopen This Week" : "Mark Complete"}
@@ -244,7 +255,7 @@ export function OptimizationCalendar({
                   <input
                     type="checkbox"
                     checked={task.completed}
-                    onChange={(event) => onChange(updateOptimizationTask(schedule, task.id, event.target.checked))}
+                    onChange={(event) => onChange(updateOptimizationTask(schedule, task.id, event.target.checked, workDateTimestamp))}
                     className="mt-1 h-4 w-4 rounded border-line accent-[#F47322]"
                   />
                   <div className="min-w-0 flex-1">
@@ -272,7 +283,7 @@ export function OptimizationCalendar({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onChange(logOptimizationTaskCompletion(schedule, task.id))}
+                    onClick={() => onChange(logOptimizationTaskCompletion(schedule, task.id, workDateTimestamp))}
                     className="shrink-0 rounded-full border border-line bg-white px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-ink transition hover:border-brand hover:text-brand"
                   >
                     Log Work
@@ -334,6 +345,19 @@ function groupCompletionEventsByDay(events: Array<{ task: OptimizationTask; comp
     groups.set(day, [...(groups.get(day) ?? []), event]);
   });
   return [...groups.entries()].map(([day, groupEvents]) => ({ day, events: groupEvents }));
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function toWorkDateTimestamp(dateValue: string) {
+  if (!dateValue) return new Date().toISOString();
+  const [year, month, day] = dateValue.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1, 12, 0, 0).toISOString();
 }
 
 function SummaryCard({ label, value, helper, good }: { label: string; value: string; helper: string; good?: boolean }) {

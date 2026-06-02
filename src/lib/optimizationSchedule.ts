@@ -108,8 +108,8 @@ export async function parseOptimizationScheduleFile(file: File): Promise<Optimiz
   });
 }
 
-export function updateOptimizationTask(state: OptimizationScheduleState, taskIdToUpdate: string, completed: boolean): OptimizationScheduleState {
-  const completedAt = new Date().toISOString();
+export function updateOptimizationTask(state: OptimizationScheduleState, taskIdToUpdate: string, completed: boolean, completedAtOverride?: string): OptimizationScheduleState {
+  const completedAt = completedAtOverride ?? new Date().toISOString();
   return {
     ...state,
     tasks: state.tasks.map((task) =>
@@ -125,8 +125,8 @@ export function updateOptimizationTask(state: OptimizationScheduleState, taskIdT
   };
 }
 
-export function logOptimizationTaskCompletion(state: OptimizationScheduleState, taskIdToUpdate: string): OptimizationScheduleState {
-  const completedAt = new Date().toISOString();
+export function logOptimizationTaskCompletion(state: OptimizationScheduleState, taskIdToUpdate: string, completedAtOverride?: string): OptimizationScheduleState {
+  const completedAt = completedAtOverride ?? new Date().toISOString();
   return {
     ...state,
     tasks: state.tasks.map((task) =>
