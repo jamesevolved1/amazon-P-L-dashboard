@@ -4,6 +4,7 @@ import { AdPotential } from "./components/AdPotential";
 import { DataQualityPanel } from "./components/DataQualityPanel";
 import { FileImport } from "./components/FileImport";
 import { KpiCard } from "./components/KpiCard";
+import { OptimizationCalendar } from "./components/OptimizationCalendar";
 import { ParentAsinProfitTable } from "./components/ParentAsinProfitTable";
 import { ProfitCharts } from "./components/ProfitCharts";
 import { ReportingDashboard } from "./components/ReportingDashboard";
@@ -19,6 +20,7 @@ import { currency, number, percent } from "./lib/format";
 import { defaultScenario, sampleSkus } from "./lib/mockData";
 import { initialAdPotentialState } from "./lib/adPotentialCalculations";
 import { emptyReportingState } from "./lib/reportingData";
+import { initialOptimizationScheduleState, normalizeOptimizationScheduleState } from "./lib/optimizationSchedule";
 import { loadActiveClientId, loadAdPotentialStates, loadClients, loadClientSkuData, loadReportingStates, loadSavedScenarios, saveActiveClientId, saveAdPotentialStates, saveClients, saveClientSkuData, saveReportingStates, saveScenarios } from "./lib/storage";
 import type { SupabaseSession } from "./lib/supabase";
 import type { AdPotentialPlannerState, AppSection, CalculatedSkuPnl, ClientAccount, ProductSku, ReportingState, ScenarioAssumptions } from "./types/models";
@@ -85,6 +87,7 @@ export default function App({ session }: { session: SupabaseSession | null }) {
   }, [userId]);
 
   const skus = clientSkuData[activeClientId] ?? sampleSkus;
+  const activeClient = clients.find((client) => client.id === activeClientId) ?? clients[0];
   const activeAdPotentialState = adPotentialStates[activeClientId] ?? initialAdPotentialState;
   const activeReportingState = reportingStates[activeClientId] ?? emptyReportingState;
   const portfolio = useMemo(() => calculatePortfolio(skus, scenario), [skus, scenario]);
@@ -233,6 +236,15 @@ export default function App({ session }: { session: SupabaseSession | null }) {
     }
   };
 
+  const updateOptimizationSchedule = (state: NonNullable<ClientAccount["businessGoals"]>["optimizationSchedule"]) => {
+    if (!activeClient || !state) return;
+    const businessGoals = {
+      ...(activeClient.businessGoals ?? {}),
+      optimizationSchedule: normalizeOptimizationScheduleState(state),
+    };
+    updateClient(activeClient.id, { businessGoals });
+  };
+
   return (
     <div className="app-shell min-h-screen text-ink">
       <Sidebar
@@ -343,6 +355,14 @@ export default function App({ session }: { session: SupabaseSession | null }) {
 
         {activeSection === "reporting" ? (
           <ReportingDashboard state={activeReportingState} onStateChange={updateReportingState} />
+        ) : null}
+
+        {activeSection === "optimization" ? (
+          <OptimizationCalendar
+            clientName={activeClient?.name ?? "Active client"}
+            state={activeClient?.businessGoals?.optimizationSchedule ?? initialOptimizationScheduleState}
+            onChange={updateOptimizationSchedule}
+          />
         ) : null}
 
         {activeSection === "performance" ? (

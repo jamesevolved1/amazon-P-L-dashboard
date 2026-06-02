@@ -195,6 +195,24 @@ export interface ClientBusinessGoals {
   minimumRoas?: number | null;
   currentProjectedSales?: number | null;
   desiredSalesNextPeriod?: number | null;
+  optimizationSchedule?: OptimizationScheduleState;
+}
+
+export type OptimizationCadence = "daily" | "weekly" | "monthly" | "quarterly";
+
+export interface OptimizationTask {
+  id: string;
+  cadence: OptimizationCadence;
+  category: string;
+  timing?: string;
+  title: string;
+  completed: boolean;
+}
+
+export interface OptimizationScheduleState {
+  tasks: OptimizationTask[];
+  importedAt: string | null;
+  sourceName: string | null;
 }
 
 export interface AdPotentialBaseline {
@@ -353,4 +371,4 @@ export interface ReportingState {
   errors: string[];
 }
 
-export type AppSection = "dashboard" | "clients" | "upload" | "sku-pnl" | "parent-asin" | "reporting" | "ad-potential" | "performance" | "settings";
+export type AppSection = "dashboard" | "clients" | "upload" | "sku-pnl" | "parent-asin" | "reporting" | "ad-potential" | "optimization" | "performance" | "settings";
