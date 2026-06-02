@@ -142,12 +142,40 @@ export function logOptimizationTaskCompletion(state: OptimizationScheduleState, 
   };
 }
 
+export function removeOptimizationTaskCompletion(state: OptimizationScheduleState, taskIdToUpdate: string, completedAtToRemove: string): OptimizationScheduleState {
+  return {
+    ...state,
+    tasks: state.tasks.map((task) => {
+      if (task.id !== taskIdToUpdate) return task;
+      const completionHistory = removeOneCompletion(task.completionHistory ?? [], completedAtToRemove);
+      const completedAt = completionHistory[completionHistory.length - 1] ?? null;
+      return {
+        ...task,
+        completed: completionHistory.length > 0,
+        completedAt,
+        completionHistory,
+      };
+    }),
+  };
+}
+
 function dedupeTasks(tasks: OptimizationTask[]) {
   return [...new Map(tasks.map((task) => [task.id, task])).values()];
 }
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function removeOneCompletion(history: string[], completedAtToRemove: string) {
+  let removed = false;
+  return history.filter((completedAt) => {
+    if (!removed && completedAt === completedAtToRemove) {
+      removed = true;
+      return false;
+    }
+    return true;
+  });
 }
 
 function taskId(cadence: string, category: string, timing: string | undefined, title: string) {
