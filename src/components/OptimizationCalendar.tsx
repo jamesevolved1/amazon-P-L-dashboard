@@ -1,7 +1,7 @@
-import { CalendarCheck, CheckCircle2, Clock3, FileSpreadsheet, History, RotateCcw, UploadCloud } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Clock3, FileSpreadsheet, History, RotateCcw, Sparkles, UploadCloud } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { initialOptimizationScheduleState, normalizeOptimizationScheduleState, parseOptimizationScheduleFile, updateOptimizationTask } from "../lib/optimizationSchedule";
-import type { OptimizationCadence, OptimizationScheduleState } from "../types/models";
+import { initialOptimizationScheduleState, logOptimizationTaskCompletion, normalizeOptimizationScheduleState, parseOptimizationScheduleFile, updateOptimizationTask } from "../lib/optimizationSchedule";
+import type { OptimizationCadence, OptimizationScheduleState, OptimizationTask } from "../types/models";
 
 const cadenceLabels: Record<OptimizationCadence, string> = {
   daily: "Daily",
@@ -31,14 +31,9 @@ export function OptimizationCalendar({
   const schedule = normalizeOptimizationScheduleState(state);
   const completed = schedule.tasks.filter((task) => task.completed).length;
   const progress = schedule.tasks.length ? completed / schedule.tasks.length : 0;
-  const recentlyCompleted = useMemo(
-    () =>
-      schedule.tasks
-        .filter((task) => task.completed && task.completedAt)
-        .sort((a, b) => new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime())
-        .slice(0, 8),
-    [schedule.tasks],
-  );
+  const completionEvents = useMemo(() => getCompletionEvents(schedule.tasks), [schedule.tasks]);
+  const workLogByDay = useMemo(() => groupCompletionEventsByDay(completionEvents), [completionEvents]);
+  const deepDiveTask = useMemo(() => schedule.tasks.find((task) => isDeepDiveTask(task.title)), [schedule.tasks]);
   const grouped = useMemo(
     () =>
       (Object.keys(cadenceLabels) as OptimizationCadence[]).map((cadence) => {
@@ -124,33 +119,109 @@ export function OptimizationCalendar({
         </div>
       ) : null}
 
-      {recentlyCompleted.length ? (
-        <div className="rounded-lg border border-line bg-white p-4 shadow-card">
-          <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-brand" />
-            <h3 className="text-lg font-extrabold text-ink">Recently Completed</h3>
+      <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.78fr)_minmax(0,1.22fr)]">
+        <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+          <div className="border-b border-line bg-gradient-to-br from-[#102A3A] to-[#1D6680] px-5 py-4 text-white">
+            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.18em] text-accent">
+              <Sparkles className="h-4 w-4" />
+              Priority Work
+            </div>
+            <h3 className="mt-2 text-xl font-extrabold">Ad Account Deep Dive</h3>
+            <p className="mt-1 text-sm leading-6 text-white/75">
+              Keep this at the top because it is the big weekly account review anchor.
+            </p>
           </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {recentlyCompleted.map((task) => (
-              <div key={task.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                <div className="text-sm font-extrabold text-ink">{task.title}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-emerald-900">
-                  <span>{cadenceLabels[task.cadence]}</span>
-                  <span>/</span>
-                  <span>{task.category}</span>
-                  <span>/</span>
-                  <span>{formatCompletedAt(task.completedAt)}</span>
+          {deepDiveTask ? (
+            <div className="p-5">
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <div className="text-lg font-extrabold text-ink">{deepDiveTask.title}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-steel ring-1 ring-line">{deepDiveTask.category}</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-steel ring-1 ring-line">Weekly</span>
+                  {deepDiveTask.completedAt ? (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-emerald-800">
+                      Last done {formatCompletedAt(deepDiveTask.completedAt)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => onChange(logOptimizationTaskCompletion(schedule, deepDiveTask.id))}
+                    className="rounded-md bg-brand px-4 py-2 text-sm font-extrabold text-white transition hover:bg-deep"
+                  >
+                    Log Deep Dive Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChange(updateOptimizationTask(schedule, deepDiveTask.id, !deepDiveTask.completed))}
+                    className="rounded-md border border-line bg-white px-4 py-2 text-sm font-extrabold text-ink transition hover:border-brand"
+                  >
+                    {deepDiveTask.completed ? "Reopen This Week" : "Mark Complete"}
+                  </button>
                 </div>
               </div>
-            ))}
+              <div className="mt-4 text-xs font-bold leading-5 text-steel">
+                Completion history: {(deepDiveTask.completionHistory ?? []).length ? `${deepDiveTask.completionHistory?.length} logged sessions` : "No sessions logged yet"}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-brand" />
+                <h3 className="text-lg font-extrabold text-ink">Completion Log</h3>
+              </div>
+              <p className="mt-1 text-sm text-steel">A dated record of exactly what was completed for this client.</p>
+            </div>
+            <div className="rounded-full bg-warm px-3 py-1 text-xs font-extrabold text-steel">
+              {completionEvents.length} entries
+            </div>
+          </div>
+          <div className="max-h-[340px] overflow-y-auto p-4">
+            {workLogByDay.length ? (
+              <div className="grid gap-4">
+                {workLogByDay.map((group) => (
+                  <div key={group.day}>
+                    <div className="sticky top-0 z-10 rounded-md bg-white/95 py-1 text-xs font-extrabold uppercase tracking-[0.14em] text-steel backdrop-blur">
+                      {group.day}
+                    </div>
+                    <div className="mt-2 grid gap-2">
+                      {group.events.map((event) => (
+                        <div key={`${event.task.id}-${event.completedAt}`} className="rounded-lg border border-line bg-warm/50 px-3 py-2">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                            <div>
+                              <div className="text-sm font-extrabold text-ink">{event.task.title}</div>
+                              <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-steel">
+                                {cadenceLabels[event.task.cadence]} / {event.task.category}
+                              </div>
+                            </div>
+                            <div className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-emerald-800 ring-1 ring-emerald-200">
+                              {formatCompletedAt(event.completedAt)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-line bg-warm/50 p-5 text-sm font-bold text-steel">
+                Nothing logged yet. Click “Log Work” or check off a task to start building the client history.
+              </div>
+            )}
           </div>
         </div>
-      ) : null}
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {grouped.map(({ cadence, tasks, done, progress }) => (
           <div key={cadence} className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
-            <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+            <div className="flex items-start justify-between gap-4 border-b border-line bg-[#FAFAFA] px-5 py-4">
               <div>
                 <div className="flex items-center gap-2">
                   <CalendarCheck className="h-5 w-5 text-brand" />
@@ -169,7 +240,7 @@ export function OptimizationCalendar({
             </div>
             <div className="max-h-[460px] divide-y divide-line overflow-y-auto">
               {tasks.map((task) => (
-                <label key={task.id} className="flex cursor-pointer items-start gap-3 px-5 py-3 transition hover:bg-orange-50/45">
+                <div key={task.id} className={`flex items-start gap-3 px-5 py-3 transition hover:bg-orange-50/45 ${isDeepDiveTask(task.title) ? "bg-orange-50/70" : ""}`}>
                   <input
                     type="checkbox"
                     checked={task.completed}
@@ -192,10 +263,22 @@ export function OptimizationCalendar({
                           {formatCompletedAt(task.completedAt)}
                         </span>
                       ) : null}
+                      {(task.completionHistory ?? []).length ? (
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-steel ring-1 ring-line">
+                          {(task.completionHistory ?? []).length} logged
+                        </span>
+                      ) : null}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => onChange(logOptimizationTaskCompletion(schedule, task.id))}
+                    className="shrink-0 rounded-full border border-line bg-white px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-ink transition hover:border-brand hover:text-brand"
+                  >
+                    Log Work
+                  </button>
                   {task.completed ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" /> : null}
-                </label>
+                </div>
               ))}
             </div>
           </div>
@@ -236,6 +319,21 @@ function formatCompletedAt(value?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function getCompletionEvents(tasks: OptimizationTask[]) {
+  return tasks
+    .flatMap((task) => (task.completionHistory ?? []).map((completedAt) => ({ task, completedAt })))
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+}
+
+function groupCompletionEventsByDay(events: Array<{ task: OptimizationTask; completedAt: string }>) {
+  const groups = new Map<string, Array<{ task: OptimizationTask; completedAt: string }>>();
+  events.forEach((event) => {
+    const day = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date(event.completedAt));
+    groups.set(day, [...(groups.get(day) ?? []), event]);
+  });
+  return [...groups.entries()].map(([day, groupEvents]) => ({ day, events: groupEvents }));
 }
 
 function SummaryCard({ label, value, helper, good }: { label: string; value: string; helper: string; good?: boolean }) {

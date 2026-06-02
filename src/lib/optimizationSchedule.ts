@@ -32,7 +32,7 @@ const defaultTasks: Array<Omit<OptimizationTask, "id" | "completed">> = [
 ];
 
 export const initialOptimizationScheduleState: OptimizationScheduleState = {
-  tasks: defaultTasks.map((task) => ({ ...task, id: taskId(task.cadence, task.category, task.timing, task.title), completed: false, completedAt: null })),
+  tasks: defaultTasks.map((task) => ({ ...task, id: taskId(task.cadence, task.category, task.timing, task.title), completed: false, completedAt: null, completionHistory: [] })),
   importedAt: null,
   sourceName: "Default optimization framework",
 };
@@ -51,15 +51,20 @@ export function normalizeOptimizationScheduleState(state?: Partial<OptimizationS
     sourceName: state.sourceName ?? "Optimization schedule",
     tasks: state.tasks
       .filter((task) => task.title?.trim())
-      .map((task) => ({
-        id: task.id || taskId(task.cadence, task.category, task.timing, task.title),
-        cadence: task.cadence,
-        category: task.category || "Optimization",
-        timing: task.timing || undefined,
-        title: task.title,
-        completed: Boolean(task.completed),
-        completedAt: task.completed ? task.completedAt ?? null : null,
-      })),
+      .map((task) => {
+        const completionHistory = Array.from(new Set([...(task.completionHistory ?? []), ...(task.completedAt ? [task.completedAt] : [])])).sort();
+        const completedAt = task.completed ? task.completedAt ?? completionHistory[completionHistory.length - 1] ?? null : null;
+        return {
+          id: task.id || taskId(task.cadence, task.category, task.timing, task.title),
+          cadence: task.cadence,
+          category: task.category || "Optimization",
+          timing: task.timing || undefined,
+          title: task.title,
+          completed: Boolean(task.completed),
+          completedAt,
+          completionHistory,
+        };
+      }),
   };
 }
 
@@ -91,6 +96,7 @@ export async function parseOptimizationScheduleFile(file: File): Promise<Optimiz
         title,
         completed,
         completedAt: completed ? importedAt : null,
+        completionHistory: completed ? [importedAt] : [],
       });
     });
   });
@@ -103,6 +109,7 @@ export async function parseOptimizationScheduleFile(file: File): Promise<Optimiz
 }
 
 export function updateOptimizationTask(state: OptimizationScheduleState, taskIdToUpdate: string, completed: boolean): OptimizationScheduleState {
+  const completedAt = new Date().toISOString();
   return {
     ...state,
     tasks: state.tasks.map((task) =>
@@ -110,7 +117,25 @@ export function updateOptimizationTask(state: OptimizationScheduleState, taskIdT
         ? {
             ...task,
             completed,
-            completedAt: completed ? new Date().toISOString() : null,
+            completedAt: completed ? completedAt : null,
+            completionHistory: completed && !task.completed ? [...(task.completionHistory ?? []), completedAt] : task.completionHistory ?? [],
+          }
+        : task,
+    ),
+  };
+}
+
+export function logOptimizationTaskCompletion(state: OptimizationScheduleState, taskIdToUpdate: string): OptimizationScheduleState {
+  const completedAt = new Date().toISOString();
+  return {
+    ...state,
+    tasks: state.tasks.map((task) =>
+      task.id === taskIdToUpdate
+        ? {
+            ...task,
+            completed: true,
+            completedAt,
+            completionHistory: [...(task.completionHistory ?? []), completedAt],
           }
         : task,
     ),
