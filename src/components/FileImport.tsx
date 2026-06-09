@@ -55,6 +55,13 @@ const reportSlots: ReportSlot[] = [
     required: false,
     accepts: ".xlsx,.xls,.csv",
   },
+  {
+    id: "strategy-report",
+    title: "Client Strategy Report",
+    description: "Optional client-facing monthly scorecard from the Strategy Doc Report tab. Uploading it updates reporting without replacing P&L data.",
+    required: false,
+    accepts: ".xlsx,.xls,.csv",
+  },
 ];
 
 const packItems: PackItem[] = [
@@ -179,18 +186,21 @@ export function FileImport({ onLoaded, onReportingLoaded }: FileImportProps) {
           ? await parseAmazonReportBundle(files)
           : { skus: [], warnings: ["Stage at least one master workbook or the separate source reports before building the SKU model."], summary: undefined };
 
-      onLoaded(result.skus, result.warnings);
-      if (result.skus.length && onReportingLoaded) {
+      if (result.skus.length) onLoaded(result.skus, result.warnings);
+      if (onReportingLoaded) {
         onReportingLoaded(await reportingStateFromUploadedFiles(files, result.skus));
       }
       setSummary(result.summary ?? null);
-      if (!result.skus.length) {
+      const strategyOnly = (files["strategy-report"] ?? []).length > 0 && !hasMasterWorkbook && !hasSourceFiles;
+      if (!result.skus.length && !strategyOnly) {
         setBuildState("error");
         setBuildMessage("No SKU records were built, so the active client dashboard was left unchanged. Check the import summary and upload a workbook tab or report with ASIN/SKU rows.");
         return;
       }
       setBuildState("success");
-      setBuildMessage(`Imported ${result.skus.length.toLocaleString()} SKUs for the active client. Dashboard, SKU P&L, and Performance Review are now updated.`);
+      setBuildMessage(strategyOnly
+        ? "Imported the client strategy scorecard. The Reporting Dashboard is now updated."
+        : `Imported ${result.skus.length.toLocaleString()} SKUs for the active client. Dashboard, SKU P&L, and Performance Review are now updated.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "The files could not be parsed.";
       onLoaded([], [`Import failed: ${message}`]);
@@ -364,6 +374,7 @@ async function detectReportSlot(file: File): Promise<string | null> {
   const sheetKey = sheetNames.join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ");
   const combined = `${nameKey} ${sheetKey}`;
 
+  if (combined.includes("strategy doc") || combined.includes("strategy report") || combined.includes("partners strategy")) return "strategy-report";
   if (combined.includes("bulk") || combined.includes("sponsored products campaigns") || combined.includes("sponsored display campaigns") || combined.includes("sp search term report")) return "campaign-export";
   if ((combined.includes("master") || combined.includes("profit matrix")) && (combined.includes("business report") || combined.includes("fee preview") || combined.includes("advertising product"))) return "profit-matrix";
   if (combined.includes("business report") || combined.includes("sales traffic")) return "business-report";

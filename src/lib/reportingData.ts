@@ -6,10 +6,13 @@ import type {
   ReportingSearchTermRow,
   ReportingSourceConfig,
   ReportingState,
+  ReportingStrategyMonth,
 } from "../types/models";
 
 export const emptyReportingSourceConfig: ReportingSourceConfig = {
   masterSheetUrl: "",
+  strategySheetUrl: "",
+  strategyTabName: "Report",
   profitMatrixTabName: "Profit Matrix",
   bulkCampaignTabName: "Sponsored Products Campaigns, Sponsored Brands Campaigns, SB Multi Ad Group Campaigns, Sponsored Display Campaigns, SP Search Term Report, SB Search Term Report",
   campaignTabName: "Campaign Report",
@@ -34,10 +37,31 @@ export const emptyReportingState: ReportingState = {
   products: [],
   searchTerms: [],
   daily: [],
+  strategyMonths: [],
   errors: [],
 };
 
 type RawRow = Record<string, unknown>;
+
+const strategyReportHeaders = [
+  "Month",
+  "Total Sales",
+  "Sessions",
+  "Conv Rate",
+  "Organic Sales",
+  "Impressions",
+  "Clicks",
+  "CTR",
+  "AD spend",
+  "Ad Sales",
+  "ACOS",
+  "ROAS",
+  "TACOS",
+  "CPC",
+  "Ad Sales %",
+  "Organic Sales %",
+  "Subscriptions",
+];
 
 const headerAliases = {
   campaign: ["campaign", "campaign name", "campaignname"],
@@ -97,6 +121,15 @@ function amount(row: RawRow, aliases: string[]) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const parsed = Number(String(value).replace(/[$,%\s,]/g, ""));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function ratio(row: RawRow, aliases: string[]) {
+  const value = pick(row, aliases);
+  if (typeof value === "number") return Number.isFinite(value) ? (value > 1 ? value / 100 : value) : 0;
+  const raw = String(value ?? "").trim();
+  const parsed = Number(raw.replace(/[$,%\s,]/g, ""));
+  if (!Number.isFinite(parsed)) return 0;
+  return raw.includes("%") || parsed > 1 ? parsed / 100 : parsed;
 }
 
 function normalizeGoogleSheetUrl(url: string) {
@@ -263,6 +296,80 @@ async function workbookRowsFromFile(file: File): Promise<Array<{ sheetName: stri
   return workbook.SheetNames.map((sheetName) => ({ sheetName, rows: sheetRows(workbook, sheetName) })).filter((sheet) => sheet.rows.length);
 }
 
+async function strategyMonthsFromFile(file: File): Promise<ReportingStrategyMonth[]> {
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+  return strategyMonthsFromWorkbook(workbook);
+}
+
+async function strategyMonthsFromUrl(url: string, tabName = "Report"): Promise<ReportingStrategyMonth[]> {
+  if (!url.trim()) return [];
+  const response = await fetch(tabCsvUrl(url, tabName));
+  if (!response.ok) throw new Error("Could not load the strategy document Report tab.");
+  const workbook = XLSX.read(await response.text(), { type: "string", cellDates: true });
+  return strategyMonthsFromWorkbook(workbook);
+}
+
+function strategyMonthsFromWorkbook(workbook: XLSX.WorkBook): ReportingStrategyMonth[] {
+  return workbook.SheetNames.flatMap((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    let activeYear = new Date().getFullYear();
+    let headers: string[] = [];
+    return matrix.flatMap<ReportingStrategyMonth>((values) => {
+      const first = String(values[0] ?? "").trim();
+      if (/^20\d{2}$/.test(first)) {
+        activeYear = Number(first);
+        return [];
+      }
+      if (cleanHeader(first) === "month") {
+        const detectedHeaders = values.map((value, index) => String(value || `Column ${index + 1}`));
+        headers = detectedHeaders.filter((header) => !header.startsWith("Column ")).length >= 8
+          ? detectedHeaders
+          : values.map((_, index) => strategyReportHeaders[index] ?? `Column ${index + 1}`);
+        return [];
+      }
+      if (!headers.length || !isStrategyPeriod(first)) return [];
+      const row = headers.reduce<RawRow>((acc, header, index) => {
+        acc[header] = values[index] ?? "";
+        return acc;
+      }, {});
+      const totalSales = amount(row, ["total sales"]);
+      const adSpend = amount(row, ["ad spend"]);
+      const adSales = amount(row, ["ad sales"]);
+      const organicSales = amount(row, ["organic sales"]) || Math.max(0, totalSales - adSales);
+      return [{
+        id: `${activeYear}-${cleanHeader(first)}`,
+        year: activeYear,
+        period: first,
+        totalSales,
+        sessions: amount(row, ["sessions"]),
+        conversionRate: ratio(row, ["conv rate", "conversion rate"]),
+        organicSales,
+        impressions: amount(row, ["impressions"]),
+        clicks: amount(row, ["clicks"]),
+        ctr: ratio(row, ["ctr"]),
+        adSpend,
+        adSales,
+        roas: amount(row, ["roas"]) || (adSpend ? adSales / adSpend : 0),
+        tacos: ratio(row, ["tacos"]) || (totalSales ? adSpend / totalSales : 0),
+        cpc: amount(row, ["cpc"]) || (rowHas(row, ["clicks"]) && amount(row, ["clicks"]) ? adSpend / amount(row, ["clicks"]) : 0),
+        adSalesPercent: ratio(row, ["ad sales %"]) || (totalSales ? adSales / totalSales : 0),
+        organicSalesPercent: ratio(row, ["organic sales %"]) || (totalSales ? organicSales / totalSales : 0),
+        subscriptions: amount(row, ["subscriptions"]),
+        isProjection: cleanHeader(first) === "projection",
+      }];
+    });
+  });
+}
+
+function isStrategyPeriod(value: string) {
+  const normalized = cleanHeader(value);
+  return [
+    "january", "february", "march", "april", "may", "june", "june", "july", "august",
+    "september", "septemer", "october", "november", "december", "projection",
+  ].includes(normalized.replace(/\.+$/, ""));
+}
+
 function rowHas(row: RawRow, aliases: string[]) {
   return pick(row, aliases) !== "";
 }
@@ -340,7 +447,9 @@ function mergeProductRows(rows: ReportingProductRow[]) {
 
 export async function reportingStateFromUploadedFiles(filesBySlot: Record<string, File[]>, skuRows: Array<{ asin: string; sku: string; title: string; totalSales: number; adSpend: number; unitsSold: number }>): Promise<ReportingState> {
   const files = [...(filesBySlot["profit-matrix"] ?? []), ...(filesBySlot["campaign-export"] ?? [])];
+  const strategyFiles = filesBySlot["strategy-report"] ?? [];
   const sheets = (await Promise.all(files.map(workbookRowsFromFile))).flat();
+  const strategyMonths = (await Promise.all(strategyFiles.map(strategyMonthsFromFile))).flat();
   const { campaignRows, productRows, searchTermRows, dailyRows, businessRows } = classifyRows(sheets);
   const totalSalesByAsin = {
     ...skuRows.reduce<Record<string, number>>((acc, sku) => {
@@ -380,7 +489,8 @@ export async function reportingStateFromUploadedFiles(filesBySlot: Record<string
     products,
     searchTerms,
     daily,
-    errors: sheets.length ? [] : ["No reporting rows were found in the uploaded master workbook or campaign export."],
+    strategyMonths,
+    errors: sheets.length || strategyMonths.length ? [] : ["No reporting rows were found in the uploaded master workbook, campaign export, or strategy report."],
   };
 }
 
@@ -394,6 +504,7 @@ export function normalizeReportingState(state?: Partial<ReportingState> | null):
     products: state?.products ?? [],
     searchTerms: state?.searchTerms ?? [],
     daily: state?.daily ?? [],
+    strategyMonths: state?.strategyMonths ?? [],
     errors: state?.errors ?? [],
   };
 }
@@ -401,6 +512,10 @@ export function normalizeReportingState(state?: Partial<ReportingState> | null):
 export async function refreshReportingFromSheets(config: ReportingSourceConfig): Promise<ReportingState> {
   const errors: string[] = [];
   const bulkTabNames = splitTabNames(config.bulkCampaignTabName);
+  const strategyMonthsPromise = strategyMonthsFromUrl(config.strategySheetUrl, "Report").catch((error) => {
+    if (config.strategySheetUrl.trim()) errors.push(`Strategy document: ${error instanceof Error ? error.message : "Could not refresh."}`);
+    return [] as ReportingStrategyMonth[];
+  });
   const [campaignRows, bulkSheets, productRows, searchTermRows, dailyRows, businessRows] = await Promise.all(
     ([
       ["Campaign report", sourceUrl(config, "campaignCsvUrl", config.campaignTabName)],
@@ -441,6 +556,7 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
   const normalizedCampaignRows = bulkCampaignRows.length ? classifiedBulk.campaignRows : campaignRows;
   const normalizedProductRows = [...productRows, ...classifiedBulk.productRows];
   const normalizedSearchRows = [...searchTermRows, ...classifiedBulk.searchTermRows];
+  const strategyMonths = await strategyMonthsPromise;
   return {
     sourceConfig: config,
     lastRefreshedAt: new Date().toISOString(),
@@ -449,6 +565,7 @@ export async function refreshReportingFromSheets(config: ReportingSourceConfig):
     products: mergeProductRows(normalizedProductRows.map((row) => productFromRow(row, totalSalesByAsin)).filter((row) => row.product !== "Unnamed product" || row.spend || row.adSales)),
     searchTerms: normalizedSearchRows.map(searchTermFromRow).filter((row) => row.searchTerm !== "Unnamed search term" || row.spend || row.sales),
     daily: daily.length ? daily : dailyFromAdRows([...normalizedCampaignRows, ...normalizedProductRows, ...normalizedSearchRows]),
+    strategyMonths,
     errors,
   };
 }

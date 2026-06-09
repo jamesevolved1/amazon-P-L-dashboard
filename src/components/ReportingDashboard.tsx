@@ -1,5 +1,5 @@
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, Download, FileSpreadsheet, Filter, RefreshCw, Target } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, Download, FileSpreadsheet, Filter, RefreshCw, Search, Target } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import { currency, number, percent } from "../lib/format";
 import { emptyReportingSourceConfig, refreshReportingFromSheets } from "../lib/reportingData";
-import type { ReportingCampaignRow, ReportingProductRow, ReportingState } from "../types/models";
+import type { ReportingCampaignRow, ReportingProductRow, ReportingSearchTermRow, ReportingState, ReportingStrategyMonth } from "../types/models";
 
 const dailyTrend = [
   { day: "May 15", spend: 1880, sales: 6920, impressions: 26096, clicks: 3775 },
@@ -68,6 +68,7 @@ const sampleState: ReportingState = {
   })),
   searchTerms: [],
   daily: dailyTrend.map((row) => ({ ...row, orders: 0 })),
+  strategyMonths: [],
   errors: [],
 };
 
@@ -112,8 +113,13 @@ const requirements = [
 
 export function ReportingDashboard({ state, onStateChange }: { state: ReportingState; onStateChange: (state: ReportingState) => void }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [strategySourceOpen, setStrategySourceOpen] = useState(false);
+  const [strategySheetUrl, setStrategySheetUrl] = useState(state.sourceConfig.strategySheetUrl ?? "");
+  const [keywordSearch, setKeywordSearch] = useState("");
+  const [keywordFilter, setKeywordFilter] = useState<"all" | "winner" | "waste" | "opportunity">("all");
+  useEffect(() => setStrategySheetUrl(state.sourceConfig.strategySheetUrl ?? ""), [state.sourceConfig.strategySheetUrl]);
   const rows = useMemo(() => {
-    const hasImportedData = state.campaigns.length || state.products.length || state.daily.length;
+    const hasImportedData = state.campaigns.length || state.products.length || state.searchTerms.length || state.daily.length || state.strategyMonths.length;
     return hasImportedData ? state : sampleState;
   }, [state]);
   const hasImportedRows = rows !== sampleState;
@@ -163,14 +169,37 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const refreshedLabel = state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Using sample data";
   const topCampaigns = [...baseAdRows].sort((a, b) => b.sales - a.sales).slice(0, 5);
   const weakCampaigns = [...baseAdRows].sort((a, b) => (b.sales ? b.spend / b.sales : 999) - (a.sales ? a.spend / a.sales : 999)).slice(0, 5);
+  const strategyMonths = rows.strategyMonths ?? [];
+  const latestStrategyMonth = [...strategyMonths].reverse().find((row) => !row.isProjection) ?? null;
+  const previousStrategyMonth = latestStrategyMonth ? strategyMonths[strategyMonths.indexOf(latestStrategyMonth) - 1] ?? null : null;
+  const keywordInsights = useMemo(() => buildKeywordInsights(rows.searchTerms), [rows.searchTerms]);
+  const filteredKeywords = keywordInsights.filter((row) => {
+    const matchesSearch = !keywordSearch.trim() || `${row.searchTerm} ${row.campaign}`.toLowerCase().includes(keywordSearch.toLowerCase());
+    const matchesFilter = keywordFilter === "all" || row.signalKey === keywordFilter;
+    return matchesSearch && matchesFilter;
+  });
 
   const refreshSheets = async () => {
     setIsRefreshing(true);
     try {
       const refreshed = await refreshReportingFromSheets(state.sourceConfig);
-      onStateChange(refreshed);
+      onStateChange(mergeReportingRefresh(state, refreshed));
     } catch (error) {
       onStateChange({ ...state, errors: [error instanceof Error ? error.message : "Could not refresh reporting data."] });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const connectStrategyDoc = async () => {
+    const nextConfig = { ...state.sourceConfig, strategySheetUrl: strategySheetUrl.trim(), strategyTabName: "Report" };
+    setIsRefreshing(true);
+    try {
+      const refreshed = await refreshReportingFromSheets(nextConfig);
+      onStateChange(mergeReportingRefresh(state, { ...refreshed, sourceConfig: nextConfig }));
+      setStrategySourceOpen(false);
+    } catch (error) {
+      onStateChange({ ...state, sourceConfig: nextConfig, errors: [error instanceof Error ? error.message : "Could not load the strategy document Report tab."] });
     } finally {
       setIsRefreshing(false);
     }
@@ -203,6 +232,14 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
                 Export
               </button>
               <button
+                onClick={() => setStrategySourceOpen((open) => !open)}
+                className="inline-flex items-center gap-2 rounded-md bg-white/10 px-4 py-2 text-sm font-extrabold hover:bg-white/15"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Strategy Doc
+                <ChevronDown className={`h-4 w-4 transition ${strategySourceOpen ? "rotate-180" : ""}`} />
+              </button>
+              <button
                 onClick={refreshSheets}
                 disabled={isRefreshing}
                 className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-extrabold text-[#102A3A] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -228,6 +265,46 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           <ReportMetric label="CPC" value={`$${cpc.toFixed(2)}`} delta="+6.6%" tone="neutral" />
         </div>
       </div>
+
+      {strategySourceOpen ? (
+        <div className="rounded-lg border border-line bg-white p-5 shadow-card">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Live Client Scorecard</div>
+              <h3 className="mt-2 text-lg font-extrabold text-ink">Connect the Strategy Doc</h3>
+              <p className="mt-1 text-sm text-steel">The app reads only the <strong>Report</strong> tab from this Google Sheet.</p>
+              <input
+                value={strategySheetUrl}
+                onChange={(event) => setStrategySheetUrl(event.target.value)}
+                placeholder="Paste the Google Sheet link"
+                className="mt-4 w-full rounded-md border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none transition focus:border-brand"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={connectStrategyDoc}
+              disabled={!strategySheetUrl.trim() || isRefreshing}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-5 py-2.5 text-sm font-extrabold text-white transition hover:bg-deep disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              Connect & Refresh
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {strategyMonths.length ? (
+        <StrategyScorecard rows={strategyMonths} latest={latestStrategyMonth} previous={previousStrategyMonth} />
+      ) : null}
+
+      <KeywordIntelligence
+        rows={filteredKeywords}
+        totalRows={keywordInsights.length}
+        search={keywordSearch}
+        filter={keywordFilter}
+        onSearch={setKeywordSearch}
+        onFilter={setKeywordFilter}
+      />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
         <div className="grid gap-5">
@@ -318,6 +395,186 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         <BudgetPacing campaigns={campaignData} />
       </div>
     </section>
+  );
+}
+
+function StrategyScorecard({
+  rows,
+  latest,
+  previous,
+}: {
+  rows: ReportingStrategyMonth[];
+  latest: ReportingStrategyMonth | null;
+  previous: ReportingStrategyMonth | null;
+}) {
+  const chartRows = rows.slice(-13).map((row) => ({ ...row, label: `${row.period.slice(0, 3)} ${String(row.year).slice(-2)}` }));
+  return (
+    <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+      <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Client Strategy Scorecard</div>
+          <h3 className="mt-2 text-xl font-extrabold text-ink">Monthly Business Performance</h3>
+          <p className="mt-1 text-sm text-steel">Live from the Strategy Doc Report tab. This is the client-call view of business and advertising performance together.</p>
+        </div>
+        {latest ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-900">
+            Latest actual: {latest.period} {latest.year}
+          </div>
+        ) : null}
+      </div>
+      {latest ? (
+        <div className="grid gap-3 bg-[#F1F4F8] p-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <StrategyMetric label="Total Sales" value={currency(latest.totalSales)} delta={metricDelta(latest.totalSales, previous?.totalSales)} />
+          <StrategyMetric label="Organic Sales" value={currency(latest.organicSales)} delta={metricDelta(latest.organicSales, previous?.organicSales)} />
+          <StrategyMetric label="Ad Sales" value={currency(latest.adSales)} delta={metricDelta(latest.adSales, previous?.adSales)} />
+          <StrategyMetric label="Ad Spend" value={currency(latest.adSpend)} delta={metricDelta(latest.adSpend, previous?.adSpend)} />
+          <StrategyMetric label="ROAS" value={`${latest.roas.toFixed(2)}x`} delta={metricDelta(latest.roas, previous?.roas)} />
+          <StrategyMetric label="TACOS" value={percent(latest.tacos)} delta={metricDelta(latest.tacos, previous?.tacos, true)} />
+          <StrategyMetric label="Sessions" value={number(latest.sessions)} delta={metricDelta(latest.sessions, previous?.sessions)} />
+          <StrategyMetric label="Conv. Rate" value={percent(latest.conversionRate)} delta={metricDelta(latest.conversionRate, previous?.conversionRate)} />
+        </div>
+      ) : null}
+      <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(480px,0.85fr)]">
+        <div>
+          <h4 className="text-base font-extrabold text-ink">Sales Mix Trend</h4>
+          <p className="mt-1 text-sm text-steel">Total, organic, and ad-attributed sales by month.</p>
+          <div className="mt-4 h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartRows}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(143,162,175,0.28)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(value: number) => currency(value)} />
+                <Legend />
+                <Bar dataKey="organicSales" name="Organic sales" fill="#1D6680" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="adSales" name="Ad sales" fill="#F47322" radius={[4, 4, 0, 0]} />
+                <Line type="monotone" dataKey="totalSales" name="Total sales" stroke="#102A3A" strokeWidth={2.5} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="overflow-auto rounded-lg border border-line">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-steel">
+              <tr>
+                {["Period", "Sales", "Organic", "Spend", "Ad Sales", "ROAS", "TACOS", "CVR", "Sessions"].map((head) => (
+                  <th key={head} className="border-b border-line px-3 py-3 text-left font-extrabold">{head}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...rows].reverse().slice(0, 15).map((row) => (
+                <tr key={row.id} className={row.isProjection ? "bg-orange-50" : "hover:bg-warm/50"}>
+                  <td className="border-b border-line px-3 py-3 font-extrabold text-ink">{row.period} {row.year}</td>
+                  <td className="border-b border-line px-3 py-3">{currency(row.totalSales)}</td>
+                  <td className="border-b border-line px-3 py-3">{currency(row.organicSales)}</td>
+                  <td className="border-b border-line px-3 py-3">{currency(row.adSpend)}</td>
+                  <td className="border-b border-line px-3 py-3">{currency(row.adSales)}</td>
+                  <td className="border-b border-line px-3 py-3 font-bold">{row.roas.toFixed(2)}x</td>
+                  <td className="border-b border-line px-3 py-3">{percent(row.tacos)}</td>
+                  <td className="border-b border-line px-3 py-3">{percent(row.conversionRate)}</td>
+                  <td className="border-b border-line px-3 py-3">{number(row.sessions)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StrategyMetric({ label, value, delta }: { label: string; value: string; delta: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-white p-3 shadow-sm">
+      <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-steel">{label}</div>
+      <div className="mt-2 text-xl font-extrabold text-ink">{value}</div>
+      <div className="mt-1 text-[11px] font-bold text-steel">{delta}</div>
+    </div>
+  );
+}
+
+type KeywordInsight = ReportingSearchTermRow & {
+  roas: number;
+  ctr: number;
+  conversionRate: number;
+  signalKey: "winner" | "waste" | "opportunity" | "watch";
+  signal: string;
+  action: string;
+};
+
+function KeywordIntelligence({
+  rows,
+  totalRows,
+  search,
+  filter,
+  onSearch,
+  onFilter,
+}: {
+  rows: KeywordInsight[];
+  totalRows: number;
+  search: string;
+  filter: "all" | "winner" | "waste" | "opportunity";
+  onSearch: (value: string) => void;
+  onFilter: (value: "all" | "winner" | "waste" | "opportunity") => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+      <div className="flex flex-col gap-4 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Keyword Intelligence</div>
+          <h3 className="mt-2 text-xl font-extrabold text-ink">What To Scale, Fix, And Negate</h3>
+          <p className="mt-1 text-sm text-steel">Search-term decisions generated from actual spend, sales, clicks, orders, and impressions.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className="flex min-w-[240px] items-center gap-2 rounded-md border border-line bg-white px-3 py-2">
+            <Search className="h-4 w-4 text-steel" />
+            <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search keyword or campaign" className="min-w-0 flex-1 text-sm outline-none" />
+          </label>
+          <select value={filter} onChange={(event) => onFilter(event.target.value as typeof filter)} className="rounded-md border border-line bg-white px-3 py-2 text-sm font-bold text-ink outline-none">
+            <option value="all">All signals</option>
+            <option value="winner">Scale winners</option>
+            <option value="waste">Wasted spend</option>
+            <option value="opportunity">Opportunities</option>
+          </select>
+        </div>
+      </div>
+      <div className="overflow-auto">
+        <table className="w-full min-w-[1180px] text-sm">
+          <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-steel">
+            <tr>
+              {["Search Term", "Campaign", "Impressions", "Clicks", "CTR", "Spend", "Sales", "ROAS", "CVR", "Signal / Next Action"].map((head) => (
+                <th key={head} className="border-b border-line px-4 py-3 text-left font-extrabold">{head}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 50).map((row, index) => (
+              <tr key={`${row.searchTerm}-${row.campaign}-${index}`} className="hover:bg-warm/50">
+                <td className="border-b border-line px-4 py-3 font-extrabold text-ink">{row.searchTerm}</td>
+                <td className="max-w-[220px] truncate border-b border-line px-4 py-3 text-steel" title={row.campaign}>{row.campaign}</td>
+                <td className="border-b border-line px-4 py-3">{number(row.impressions)}</td>
+                <td className="border-b border-line px-4 py-3">{number(row.clicks)}</td>
+                <td className="border-b border-line px-4 py-3">{percent(row.ctr)}</td>
+                <td className="border-b border-line px-4 py-3">{currency(row.spend)}</td>
+                <td className="border-b border-line px-4 py-3">{currency(row.sales)}</td>
+                <td className="border-b border-line px-4 py-3 font-bold">{row.roas.toFixed(2)}x</td>
+                <td className="border-b border-line px-4 py-3">{percent(row.conversionRate)}</td>
+                <td className="border-b border-line px-4 py-3">
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${keywordSignalClass(row.signalKey)}`}>{row.signal}</span>
+                  <div className="mt-2 text-xs font-bold text-steel">{row.action}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!rows.length ? (
+          <div className="p-8 text-center text-sm font-bold text-steel">
+            {totalRows ? "No keywords match this filter." : "Upload a bulk campaign export with search-term tabs to unlock keyword intelligence."}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -446,4 +703,62 @@ function BudgetPacing({ campaigns }: { campaigns: ReportingCampaignRow[] }) {
       </div>
     </div>
   );
+}
+
+function mergeReportingRefresh(current: ReportingState, refreshed: ReportingState): ReportingState {
+  return {
+    ...current,
+    ...refreshed,
+    sourceConfig: refreshed.sourceConfig,
+    accountTotalSales: refreshed.accountTotalSales || current.accountTotalSales,
+    campaigns: refreshed.campaigns.length ? refreshed.campaigns : current.campaigns,
+    products: refreshed.products.length ? refreshed.products : current.products,
+    searchTerms: refreshed.searchTerms.length ? refreshed.searchTerms : current.searchTerms,
+    daily: refreshed.daily.length ? refreshed.daily : current.daily,
+    strategyMonths: refreshed.strategyMonths.length ? refreshed.strategyMonths : current.strategyMonths,
+  };
+}
+
+function metricDelta(current: number, previous?: number, lowerIsBetter = false) {
+  if (!previous) return "No prior-period comparison";
+  const change = (current - previous) / Math.abs(previous);
+  const direction = change >= 0 ? "+" : "";
+  const interpretation = lowerIsBetter ? (change <= 0 ? "better" : "higher") : change >= 0 ? "growth" : "decline";
+  return `${direction}${(change * 100).toFixed(1)}% vs prior (${interpretation})`;
+}
+
+function buildKeywordInsights(rows: ReportingSearchTermRow[]): KeywordInsight[] {
+  const averageImpressions = rows.length ? rows.reduce((sum, row) => sum + row.impressions, 0) / rows.length : 0;
+  const totalImpressions = rows.reduce((sum, row) => sum + row.impressions, 0);
+  const totalClicks = rows.reduce((sum, row) => sum + row.clicks, 0);
+  const averageCtr = totalImpressions ? totalClicks / totalImpressions : 0;
+  return rows
+    .map<KeywordInsight>((row) => {
+      const roas = row.spend ? row.sales / row.spend : 0;
+      const ctr = row.impressions ? row.clicks / row.impressions : 0;
+      const conversionRate = row.clicks ? row.orders / row.clicks : 0;
+      if (row.spend > 0 && (row.sales === 0 || roas < 1)) {
+        return { ...row, roas, ctr, conversionRate, signalKey: "waste", signal: "Wasted Spend", action: row.orders ? "Reduce bid and review profitability." : "Consider negative targeting or a major bid reduction." };
+      }
+      if (roas >= 2 && row.orders > 0) {
+        return { ...row, roas, ctr, conversionRate, signalKey: "winner", signal: "Scale Winner", action: "Protect rank, graduate, and test additional budget." };
+      }
+      if (row.impressions >= averageImpressions && ctr < averageCtr) {
+        return { ...row, roas, ctr, conversionRate, signalKey: "opportunity", signal: "High-Impression Opportunity", action: "Improve relevance, creative, placement, or bid to earn more clicks." };
+      }
+      return { ...row, roas, ctr, conversionRate, signalKey: "watch", signal: "Watch", action: "Keep collecting data before making a major change." };
+    })
+    .sort((a, b) => {
+      const signalRank = { winner: 0, waste: 1, opportunity: 2, watch: 3 };
+      const rankDifference = signalRank[a.signalKey] - signalRank[b.signalKey];
+      if (rankDifference) return rankDifference;
+      return b.sales + b.spend - (a.sales + a.spend);
+    });
+}
+
+function keywordSignalClass(signal: KeywordInsight["signalKey"]) {
+  if (signal === "winner") return "bg-emerald-100 text-emerald-800";
+  if (signal === "waste") return "bg-red-100 text-red-700";
+  if (signal === "opportunity") return "bg-amber-100 text-amber-800";
+  return "bg-warm text-steel";
 }

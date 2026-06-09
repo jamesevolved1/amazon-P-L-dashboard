@@ -303,6 +303,8 @@ export interface AdPotentialWhatNeedsToBeTrue {
 
 export interface ReportingSourceConfig {
   masterSheetUrl: string;
+  strategySheetUrl: string;
+  strategyTabName: string;
   profitMatrixTabName: string;
   bulkCampaignTabName: string;
   campaignTabName: string;
@@ -362,6 +364,28 @@ export interface ReportingDailyRow {
   orders: number;
 }
 
+export interface ReportingStrategyMonth {
+  id: string;
+  year: number;
+  period: string;
+  totalSales: number;
+  sessions: number;
+  conversionRate: number;
+  organicSales: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  adSpend: number;
+  adSales: number;
+  roas: number;
+  tacos: number;
+  cpc: number;
+  adSalesPercent: number;
+  organicSalesPercent: number;
+  subscriptions: number;
+  isProjection: boolean;
+}
+
 export interface ReportingState {
   sourceConfig: ReportingSourceConfig;
   lastRefreshedAt: string | null;
@@ -370,6 +394,7 @@ export interface ReportingState {
   products: ReportingProductRow[];
   searchTerms: ReportingSearchTermRow[];
   daily: ReportingDailyRow[];
+  strategyMonths: ReportingStrategyMonth[];
   errors: string[];
 }
 

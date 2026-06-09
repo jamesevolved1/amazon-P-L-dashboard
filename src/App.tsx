@@ -282,11 +282,22 @@ export default function App({ session }: { session: SupabaseSession | null }) {
                 }
               }}
               onReportingLoaded={(loadedReportingState) => {
-                const nextReportingStates = { ...reportingStates, [activeClientId]: loadedReportingState };
+                const mergedReportingState: ReportingState = {
+                  ...activeReportingState,
+                  ...loadedReportingState,
+                  accountTotalSales: loadedReportingState.accountTotalSales || activeReportingState.accountTotalSales,
+                  campaigns: loadedReportingState.campaigns.length ? loadedReportingState.campaigns : activeReportingState.campaigns,
+                  products: loadedReportingState.products.length ? loadedReportingState.products : activeReportingState.products,
+                  searchTerms: loadedReportingState.searchTerms.length ? loadedReportingState.searchTerms : activeReportingState.searchTerms,
+                  daily: loadedReportingState.daily.length ? loadedReportingState.daily : activeReportingState.daily,
+                  strategyMonths: loadedReportingState.strategyMonths.length ? loadedReportingState.strategyMonths : activeReportingState.strategyMonths,
+                  errors: loadedReportingState.errors,
+                };
+                const nextReportingStates = { ...reportingStates, [activeClientId]: mergedReportingState };
                 setReportingStates(nextReportingStates);
                 saveReportingStates(nextReportingStates);
                 if (userId && activeClientId) {
-                  saveCloudReportingState(userId, activeClientId, loadedReportingState)
+                  saveCloudReportingState(userId, activeClientId, mergedReportingState)
                     .then(() => setCloudStatus("Cloud saved"))
                     .catch((error) => setCloudStatus(`Cloud sync issue: ${error.message}`));
                 }
