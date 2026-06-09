@@ -306,25 +306,35 @@ function strategyMonthsFromWorkbook(workbook: XLSX.WorkBook): ReportingStrategyM
     const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
     let activeYear = new Date().getFullYear();
     let headers: string[] = [];
-    return matrix.flatMap<ReportingStrategyMonth>((values) => {
+    const rows: ReportingStrategyMonth[] = [];
+    let projectionRow: ReportingStrategyMonth | null = null;
+    let projectionMetadataIndex = 0;
+    matrix.forEach((values) => {
       const first = String(values[0] ?? "").trim();
       if (/^20\d{2}$/.test(first)) {
         activeYear = Number(first);
-        return [];
+        return;
       }
       if (cleanHeader(first) === "month") {
         const detectedHeaders = values.map((value, index) => String(value || `Column ${index + 1}`));
         headers = detectedHeaders.filter((header) => !header.startsWith("Column ")).length >= 8
           ? detectedHeaders
           : values.map((_, index) => strategyReportHeaders[index] ?? `Column ${index + 1}`);
-        return [];
+        return;
       }
-      if (!headers.length || !isStrategyPeriod(first)) return [];
+      if (projectionRow && /^\d{1,2}$/.test(first) && values.slice(1).every((value) => String(value ?? "").trim() === "")) {
+        const numericValue = strategyNumber(first);
+        if (projectionMetadataIndex === 0) projectionRow.dataThroughDay = numericValue;
+        if (projectionMetadataIndex === 1) projectionRow.daysInPeriod = numericValue;
+        projectionMetadataIndex += 1;
+        return;
+      }
+      if (!headers.length || !isStrategyPeriod(first)) return;
       const totalSales = strategyNumber(values[1]);
       const adSpend = strategyNumber(values[8]);
       const adSales = strategyNumber(values[9]);
       const organicSales = strategyNumber(values[4]) || Math.max(0, totalSales - adSales);
-      return [{
+      const row: ReportingStrategyMonth = {
         id: `${activeYear}-${cleanHeader(first)}`,
         year: activeYear,
         period: first,
@@ -345,8 +355,11 @@ function strategyMonthsFromWorkbook(workbook: XLSX.WorkBook): ReportingStrategyM
         organicSalesPercent: strategyRatio(values[15]) || (totalSales ? organicSales / totalSales : 0),
         subscriptions: strategyNumber(values[16]),
         isProjection: cleanHeader(first) === "projection",
-      }];
+      };
+      rows.push(row);
+      if (row.isProjection) projectionRow = row;
     });
+    return rows;
   });
 }
 

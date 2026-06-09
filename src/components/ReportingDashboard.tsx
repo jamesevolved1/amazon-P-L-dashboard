@@ -81,7 +81,7 @@ const channelMix = [
 const requirements = [
   {
     report: "Sponsored Products Advertised Product Report",
-    why: "SKU/ASIN spend, attributed sales, orders, clicks, impressions, CPC, CTR, CVR, ACOS, ROAS.",
+    why: "SKU/ASIN spend, attributed sales, orders, clicks, impressions, CPC, CTR, CVR, and ROAS.",
     cadence: "Last 30 days and prior 30 days",
   },
   {
@@ -106,7 +106,7 @@ const requirements = [
   },
   {
     report: "Business Report by Child ASIN",
-    why: "Total sales and units so the dashboard can calculate TACOS, not just ACOS.",
+    why: "Total sales and units so the dashboard can calculate account and product-level TACOS.",
     cadence: "Same date range as ads",
   },
 ];
@@ -166,7 +166,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
     : hasImportedRows
       ? [{ day: "Imported", spend: totals.spend, sales: totals.sales, impressions: totals.impressions, clicks: totals.clicks, orders: totals.orders }]
       : sampleState.daily;
-  const acos = totals.sales ? totals.spend / totals.sales : 0;
   const roas = totals.spend ? totals.sales / totals.spend : 0;
   const accountTacos = totalSales ? totals.spend / totalSales : 0;
   const ctr = totals.impressions ? totals.clicks / totals.impressions : 0;
@@ -401,6 +400,12 @@ function StrategyScorecard({
   latest: ReportingStrategyMonth | null;
   previous: ReportingStrategyMonth | null;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const projection = rows.find((row) => row.isProjection) ?? null;
+  const summary = projection ?? latest;
+  const comparison = previous;
+  const comparisonLabel = comparison ? `${comparison.period.replace(/\.+$/, "")} ${comparison.year}` : "previous month";
+  const currentThroughLabel = latest ? strategyDataThroughLabel(latest, projection?.dataThroughDay) : "";
   const chartRows = rows.slice(-13).map((row) => ({ ...row, label: `${row.period.slice(0, 3)} ${String(row.year).slice(-2)}` }));
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
@@ -411,28 +416,34 @@ function StrategyScorecard({
           <p className="mt-1 text-sm text-steel">Live from the Strategy Doc Report tab. This is the client-call view of business and advertising performance together.</p>
         </div>
         {latest ? (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-900">
-            Latest actual: {latest.period} {latest.year}
+          <div className="flex flex-wrap justify-end gap-2">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-extrabold text-amber-900">
+              Data current through {currentThroughLabel}
+            </div>
+            {projection ? (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-900">
+                Projection compared with {comparisonLabel}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
-      {latest ? (
+      {summary ? (
         <div className="grid gap-3 bg-[#F1F4F8] p-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-          <StrategyMetric label="Total Sales" value={currency(latest.totalSales)} delta={metricDelta(latest.totalSales, previous?.totalSales)} />
-          <StrategyMetric label="Organic Sales" value={currency(latest.organicSales)} delta={metricDelta(latest.organicSales, previous?.organicSales)} />
-          <StrategyMetric label="Ad Sales" value={currency(latest.adSales)} delta={metricDelta(latest.adSales, previous?.adSales)} />
-          <StrategyMetric label="Ad Spend" value={currency(latest.adSpend)} delta={metricDelta(latest.adSpend, previous?.adSpend)} />
-          <StrategyMetric label="ROAS" value={`${latest.roas.toFixed(2)}x`} delta={metricDelta(latest.roas, previous?.roas)} />
-          <StrategyMetric label="TACOS" value={percent(latest.tacos)} delta={metricDelta(latest.tacos, previous?.tacos, true)} />
-          <StrategyMetric label="ACOS" value={percent(latest.acos)} delta={metricDelta(latest.acos, previous?.acos, true)} />
-          <StrategyMetric label="Impressions" value={number(latest.impressions)} delta={metricDelta(latest.impressions, previous?.impressions)} />
-          <StrategyMetric label="Clicks" value={number(latest.clicks)} delta={metricDelta(latest.clicks, previous?.clicks)} />
-          <StrategyMetric label="CTR" value={percent(latest.ctr)} delta={metricDelta(latest.ctr, previous?.ctr)} />
-          <StrategyMetric label="CPC" value={currency(latest.cpc)} delta={metricDelta(latest.cpc, previous?.cpc, true)} />
-          <StrategyMetric label="Sessions" value={number(latest.sessions)} delta={metricDelta(latest.sessions, previous?.sessions)} />
-          <StrategyMetric label="Conv. Rate" value={percent(latest.conversionRate)} delta={metricDelta(latest.conversionRate, previous?.conversionRate)} />
-          <StrategyMetric label="Ad Sales Mix" value={percent(latest.adSalesPercent)} delta={metricDelta(latest.adSalesPercent, previous?.adSalesPercent)} />
-          <StrategyMetric label="Organic Mix" value={percent(latest.organicSalesPercent)} delta={metricDelta(latest.organicSalesPercent, previous?.organicSalesPercent)} />
+          <StrategyMetric label="Projected Total Sales" value={currency(summary.totalSales)} delta={metricDelta(summary.totalSales, comparison?.totalSales)} />
+          <StrategyMetric label="Projected Organic Sales" value={currency(summary.organicSales)} delta={metricDelta(summary.organicSales, comparison?.organicSales)} />
+          <StrategyMetric label="Projected Ad Sales" value={currency(summary.adSales)} delta={metricDelta(summary.adSales, comparison?.adSales)} />
+          <StrategyMetric label="Projected Ad Spend" value={currency(summary.adSpend)} delta={metricDelta(summary.adSpend, comparison?.adSpend)} />
+          <StrategyMetric label="Projected ROAS" value={`${summary.roas.toFixed(2)}x`} delta={metricDelta(summary.roas, comparison?.roas)} />
+          <StrategyMetric label="Projected TACOS" value={percent(summary.tacos)} delta={metricDelta(summary.tacos, comparison?.tacos, true)} />
+          <StrategyMetric label="Projected Impressions" value={number(summary.impressions)} delta={metricDelta(summary.impressions, comparison?.impressions)} />
+          <StrategyMetric label="Projected Clicks" value={number(summary.clicks)} delta={metricDelta(summary.clicks, comparison?.clicks)} />
+          <StrategyMetric label="Projected CTR" value={percent(summary.ctr)} delta={metricDelta(summary.ctr, comparison?.ctr)} />
+          <StrategyMetric label="Projected CPC" value={currency(summary.cpc)} delta={metricDelta(summary.cpc, comparison?.cpc, true)} />
+          <StrategyMetric label="Projected Sessions" value={number(summary.sessions)} delta={metricDelta(summary.sessions, comparison?.sessions)} />
+          <StrategyMetric label="Projected Conv. Rate" value={percent(summary.conversionRate)} delta={metricDelta(summary.conversionRate, comparison?.conversionRate)} />
+          <StrategyMetric label="Projected Ad Sales Mix" value={percent(summary.adSalesPercent)} delta={metricDelta(summary.adSalesPercent, comparison?.adSalesPercent)} />
+          <StrategyMetric label="Projected Organic Mix" value={percent(summary.organicSalesPercent)} delta={metricDelta(summary.organicSalesPercent, comparison?.organicSalesPercent)} />
         </div>
       ) : null}
       <div className="grid gap-5 p-5">
@@ -462,11 +473,22 @@ function StrategyScorecard({
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="overflow-auto rounded-lg border border-line">
-          <table className="w-full min-w-[1600px] text-sm">
+        <div className="overflow-hidden rounded-lg border border-line">
+          <button type="button" onClick={() => setHistoryOpen((open) => !open)} className="flex w-full items-center justify-between gap-4 bg-white px-5 py-4 text-left hover:bg-warm/50">
+            <div>
+              <h4 className="text-base font-extrabold text-ink">Monthly Performance History</h4>
+              <p className="mt-1 text-sm text-steel">{historyOpen ? "Hide the complete monthly scorecard." : "Open the complete monthly scorecard and source metrics."}</p>
+            </div>
+            <span className="flex shrink-0 items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-xs font-extrabold text-ink shadow-sm">
+              {historyOpen ? "Collapse" : "Review history"}
+              <ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+            </span>
+          </button>
+          {historyOpen ? <div className="overflow-auto border-t border-line">
+          <table className="w-full min-w-[1500px] text-sm">
             <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-steel">
               <tr>
-                {["Period", "Total Sales", "Sessions", "Conv. Rate", "Organic Sales", "Impressions", "Clicks", "CTR", "Ad Spend", "Ad Sales", "ACOS", "ROAS", "TACOS", "CPC", "Ad Sales %", "Organic Sales %", "Subscriptions"].map((head) => (
+                {["Period", "Total Sales", "Sessions", "Conv. Rate", "Organic Sales", "Impressions", "Clicks", "CTR", "Ad Spend", "Ad Sales", "ROAS", "TACOS", "CPC", "Ad Sales %", "Organic Sales %", "Subscriptions"].map((head) => (
                   <th key={head} className="border-b border-line px-3 py-3 text-left font-extrabold">{head}</th>
                 ))}
               </tr>
@@ -474,7 +496,7 @@ function StrategyScorecard({
             <tbody>
               {[...rows].reverse().slice(0, 15).map((row) => (
                 <tr key={row.id} className={row.isProjection ? "bg-orange-50" : "hover:bg-warm/50"}>
-                  <td className="border-b border-line px-3 py-3 font-extrabold text-ink">{row.period} {row.year}</td>
+                  <td className="border-b border-line px-3 py-3 font-extrabold text-ink">{displayStrategyPeriod(row.period)} {row.year}</td>
                   <td className="border-b border-line px-3 py-3">{currency(row.totalSales)}</td>
                   <td className="border-b border-line px-3 py-3">{number(row.sessions)}</td>
                   <td className="border-b border-line px-3 py-3">{percent(row.conversionRate)}</td>
@@ -484,7 +506,6 @@ function StrategyScorecard({
                   <td className="border-b border-line px-3 py-3">{percent(row.ctr)}</td>
                   <td className="border-b border-line px-3 py-3">{currency(row.adSpend)}</td>
                   <td className="border-b border-line px-3 py-3">{currency(row.adSales)}</td>
-                  <td className="border-b border-line px-3 py-3">{percent(row.acos)}</td>
                   <td className="border-b border-line px-3 py-3 font-bold">{row.roas.toFixed(2)}x</td>
                   <td className="border-b border-line px-3 py-3">{percent(row.tacos)}</td>
                   <td className="border-b border-line px-3 py-3">{currency(row.cpc)}</td>
@@ -495,6 +516,7 @@ function StrategyScorecard({
               ))}
             </tbody>
           </table>
+          </div> : null}
         </div>
       </div>
     </div>
@@ -535,7 +557,7 @@ function CampaignTable({ title, rows }: { title: string; rows: ReportingCampaign
         <table className="w-full min-w-[680px] text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-steel">
             <tr>
-              {["Campaign", "Spend", "Sales", "ACOS", "ROAS", "CTR"].map((head) => <th key={head} className="border-b border-line px-4 py-3 text-left font-extrabold">{head}</th>)}
+              {["Campaign", "Spend", "Sales", "ROAS", "CTR"].map((head) => <th key={head} className="border-b border-line px-4 py-3 text-left font-extrabold">{head}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -547,7 +569,6 @@ function CampaignTable({ title, rows }: { title: string; rows: ReportingCampaign
                 </td>
                 <td className="border-b border-line px-4 py-3">{currency(row.spend)}</td>
                 <td className="border-b border-line px-4 py-3 font-bold">{currency(row.sales)}</td>
-                <td className="border-b border-line px-4 py-3">{percent(row.sales ? row.spend / row.sales : 0)}</td>
                 <td className="border-b border-line px-4 py-3">{(row.spend ? row.sales / row.spend : 0).toFixed(1)}x</td>
                 <td className="border-b border-line px-4 py-3">{percent(row.impressions ? row.clicks / row.impressions : 0)}</td>
               </tr>
@@ -604,7 +625,6 @@ function BudgetPacing({ campaigns }: { campaigns: ReportingCampaignRow[] }) {
   const goals = [
     { label: "Spend pacing", actual: spend, target: budget, tone: "good" },
     { label: "Ad sales target", actual: sales, target: sales * 1.15 || 1, tone: "good" },
-    { label: "ACOS ceiling", actual: sales ? spend / sales : 0, target: 0.32, tone: sales && spend / sales > 0.32 ? "bad" : "good" },
     { label: "Click volume", actual: clicks, target: clicks * 1.1 || 1, tone: "good" },
   ];
   return (
@@ -618,14 +638,12 @@ function BudgetPacing({ campaigns }: { campaigns: ReportingCampaignRow[] }) {
       </div>
       <div className="mt-5 grid gap-4">
         {goals.map((goal) => {
-          const pct = goal.label.includes("ACOS") ? Math.min(1, goal.target / goal.actual) : Math.min(1, goal.actual / goal.target);
+          const pct = Math.min(1, goal.actual / goal.target);
           return (
             <div key={goal.label}>
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="font-extrabold text-ink">{goal.label}</span>
-                <span className="font-bold text-steel">
-                  {goal.label.includes("ACOS") ? `${percent(goal.actual)} / ${percent(goal.target)}` : `${currency(goal.actual)} / ${currency(goal.target)}`}
-                </span>
+                <span className="font-bold text-steel">{currency(goal.actual)} / {currency(goal.target)}</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-warm">
                 <div className={`h-full rounded-full ${goal.tone === "bad" ? "bg-danger" : "bg-brand"}`} style={{ width: `${pct * 100}%` }} />
@@ -658,4 +676,13 @@ function metricDelta(current: number, previous?: number, lowerIsBetter = false) 
   const direction = change >= 0 ? "+" : "";
   const interpretation = lowerIsBetter ? (change <= 0 ? "better" : "higher") : change >= 0 ? "growth" : "decline";
   return `${direction}${(change * 100).toFixed(1)}% vs prior (${interpretation})`;
+}
+
+function displayStrategyPeriod(period: string) {
+  return period.replace(/\.+$/, "").trim();
+}
+
+function strategyDataThroughLabel(row: ReportingStrategyMonth, dataThroughDay?: number) {
+  const period = displayStrategyPeriod(row.period);
+  return dataThroughDay ? `${period} ${dataThroughDay}, ${row.year}` : `${period} ${row.year}`;
 }

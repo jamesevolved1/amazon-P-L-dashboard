@@ -385,6 +385,8 @@ export interface ReportingStrategyMonth {
   organicSalesPercent: number;
   subscriptions: number;
   isProjection: boolean;
+  dataThroughDay?: number;
+  daysInPeriod?: number;
 }
 
 export interface ReportingState {
