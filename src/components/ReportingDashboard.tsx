@@ -401,12 +401,32 @@ function StrategyScorecard({
   previous: ReportingStrategyMonth | null;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [chartSeries, setChartSeries] = useState<Record<StrategyChartSeries, boolean>>({
+    organicSales: true,
+    adSales: true,
+    totalSales: true,
+    impressions: false,
+    clicks: false,
+    ctr: false,
+    conversionRate: false,
+  });
   const projection = rows.find((row) => row.isProjection) ?? null;
-  const summary = projection ?? latest;
+  const summary = projection ? {
+    ...projection,
+    ctr: projection.ctr || (projection.impressions ? projection.clicks / projection.impressions : 0),
+    conversionRate: projection.conversionRate || latest?.conversionRate || 0,
+    cpc: projection.cpc || (projection.clicks ? projection.adSpend / projection.clicks : 0),
+  } : latest;
   const comparison = previous;
-  const comparisonLabel = comparison ? `${comparison.period.replace(/\.+$/, "")} ${comparison.year}` : "previous month";
+  const comparisonLabel = comparison ? `${displayStrategyPeriod(comparison.period)} ${comparison.year}` : "previous month";
   const currentThroughLabel = latest ? strategyDataThroughLabel(latest, projection?.dataThroughDay) : "";
-  const chartRows = rows.slice(-13).map((row) => ({ ...row, label: `${row.period.slice(0, 3)} ${String(row.year).slice(-2)}` }));
+  const chartRows = rows.slice(-13).map((row) => ({
+    ...(row.isProjection && summary ? summary : row),
+    label: `${row.period.slice(0, 3)} ${String(row.year).slice(-2)}`,
+  }));
+  const toggleChartSeries = (series: StrategyChartSeries) => {
+    setChartSeries((current) => ({ ...current, [series]: !current[series] }));
+  };
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
       <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -430,33 +450,41 @@ function StrategyScorecard({
       </div>
       {summary ? (
         <div className="grid gap-3 bg-[#F1F4F8] p-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-          <StrategyMetric label="Projected Total Sales" value={currency(summary.totalSales)} delta={metricDelta(summary.totalSales, comparison?.totalSales)} />
-          <StrategyMetric label="Projected Organic Sales" value={currency(summary.organicSales)} delta={metricDelta(summary.organicSales, comparison?.organicSales)} />
-          <StrategyMetric label="Projected Ad Sales" value={currency(summary.adSales)} delta={metricDelta(summary.adSales, comparison?.adSales)} />
-          <StrategyMetric label="Projected Ad Spend" value={currency(summary.adSpend)} delta={metricDelta(summary.adSpend, comparison?.adSpend)} />
-          <StrategyMetric label="Projected ROAS" value={`${summary.roas.toFixed(2)}x`} delta={metricDelta(summary.roas, comparison?.roas)} />
-          <StrategyMetric label="Projected TACOS" value={percent(summary.tacos)} delta={metricDelta(summary.tacos, comparison?.tacos, true)} />
-          <StrategyMetric label="Projected Impressions" value={number(summary.impressions)} delta={metricDelta(summary.impressions, comparison?.impressions)} />
-          <StrategyMetric label="Projected Clicks" value={number(summary.clicks)} delta={metricDelta(summary.clicks, comparison?.clicks)} />
-          <StrategyMetric label="Projected CTR" value={percent(summary.ctr)} delta={metricDelta(summary.ctr, comparison?.ctr)} />
-          <StrategyMetric label="Projected CPC" value={currency(summary.cpc)} delta={metricDelta(summary.cpc, comparison?.cpc, true)} />
-          <StrategyMetric label="Projected Sessions" value={number(summary.sessions)} delta={metricDelta(summary.sessions, comparison?.sessions)} />
-          <StrategyMetric label="Projected Conv. Rate" value={percent(summary.conversionRate)} delta={metricDelta(summary.conversionRate, comparison?.conversionRate)} />
-          <StrategyMetric label="Projected Ad Sales Mix" value={percent(summary.adSalesPercent)} delta={metricDelta(summary.adSalesPercent, comparison?.adSalesPercent)} />
-          <StrategyMetric label="Projected Organic Mix" value={percent(summary.organicSalesPercent)} delta={metricDelta(summary.organicSalesPercent, comparison?.organicSalesPercent)} />
+          <StrategyMetric label="Projected Total Sales" value={currency(summary.totalSales)} delta={metricDelta(summary.totalSales, comparison?.totalSales, false, comparisonLabel)} current={latest ? currency(latest.totalSales) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Organic Sales" value={currency(summary.organicSales)} delta={metricDelta(summary.organicSales, comparison?.organicSales, false, comparisonLabel)} current={latest ? currency(latest.organicSales) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Ad Sales" value={currency(summary.adSales)} delta={metricDelta(summary.adSales, comparison?.adSales, false, comparisonLabel)} current={latest ? currency(latest.adSales) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Ad Spend" value={currency(summary.adSpend)} delta={metricDelta(summary.adSpend, comparison?.adSpend, false, comparisonLabel)} current={latest ? currency(latest.adSpend) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected ROAS" value={`${summary.roas.toFixed(2)}x`} delta={metricDelta(summary.roas, comparison?.roas, false, comparisonLabel)} current={latest ? `${latest.roas.toFixed(2)}x` : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected TACOS" value={percent(summary.tacos)} delta={metricDelta(summary.tacos, comparison?.tacos, true, comparisonLabel)} current={latest ? percent(latest.tacos) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Impressions" value={number(summary.impressions)} delta={metricDelta(summary.impressions, comparison?.impressions, false, comparisonLabel)} current={latest ? number(latest.impressions) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Clicks" value={number(summary.clicks)} delta={metricDelta(summary.clicks, comparison?.clicks, false, comparisonLabel)} current={latest ? number(latest.clicks) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected CTR" value={percent(summary.ctr)} delta={metricDelta(summary.ctr, comparison?.ctr, false, comparisonLabel)} current={latest ? percent(latest.ctr) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected CPC" value={currency(summary.cpc)} delta={metricDelta(summary.cpc, comparison?.cpc, true, comparisonLabel)} current={latest ? currency(latest.cpc) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Sessions" value={number(summary.sessions)} delta={metricDelta(summary.sessions, comparison?.sessions, false, comparisonLabel)} current={latest ? number(latest.sessions) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Conv. Rate" value={percent(summary.conversionRate)} delta={metricDelta(summary.conversionRate, comparison?.conversionRate, false, comparisonLabel)} current={latest ? percent(latest.conversionRate) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Ad Sales Mix" value={percent(summary.adSalesPercent)} delta={metricDelta(summary.adSalesPercent, comparison?.adSalesPercent, false, comparisonLabel)} current={latest ? percent(latest.adSalesPercent) : undefined} currentLabel={currentThroughLabel} />
+          <StrategyMetric label="Projected Organic Mix" value={percent(summary.organicSalesPercent)} delta={metricDelta(summary.organicSalesPercent, comparison?.organicSalesPercent, false, comparisonLabel)} current={latest ? percent(latest.organicSalesPercent) : undefined} currentLabel={currentThroughLabel} />
         </div>
       ) : null}
       <div className="grid gap-5 p-5">
         <div className="rounded-lg border border-line bg-[#FAFAFA] p-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h4 className="text-lg font-extrabold text-ink">Sales Mix Trend</h4>
-              <p className="mt-1 text-sm text-steel">Total, organic, and ad-attributed sales by month.</p>
+              <h4 className="text-lg font-extrabold text-ink">Monthly Performance Trend</h4>
+              <p className="mt-1 text-sm text-steel">Select the metrics you want to compare. Sales are shown by default; funnel metrics appear only when selected.</p>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs font-extrabold">
-              <span className="rounded-full bg-white px-3 py-1 text-[#1D6680] ring-1 ring-line">Organic sales</span>
-              <span className="rounded-full bg-white px-3 py-1 text-brand ring-1 ring-line">Ad sales</span>
-              <span className="rounded-full bg-white px-3 py-1 text-[#102A3A] ring-1 ring-line">Total sales</span>
+            <div className="flex max-w-3xl flex-wrap justify-end gap-2 text-xs font-extrabold">
+              {strategyChartOptions.map((option) => (
+                <button
+                  type="button"
+                  key={option.key}
+                  onClick={() => toggleChartSeries(option.key)}
+                  className={`rounded-full px-3 py-1.5 ring-1 transition ${chartSeries[option.key] ? "bg-white shadow-sm ring-current" : "bg-white/50 text-steel opacity-60 ring-line hover:opacity-100"}`}
+                  style={chartSeries[option.key] ? { color: option.color } : undefined}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
           <div className="mt-4 h-[360px]">
@@ -464,11 +492,17 @@ function StrategyScorecard({
               <ComposedChart data={chartRows}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(143,162,175,0.28)" />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(value: number) => currency(value)} />
-                <Bar dataKey="organicSales" name="Organic sales" fill="#1D6680" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="adSales" name="Ad sales" fill="#F47322" radius={[4, 4, 0, 0]} />
-                <Line type="monotone" dataKey="totalSales" name="Total sales" stroke="#102A3A" strokeWidth={2.5} dot={false} />
+                <YAxis yAxisId="sales" tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11 }} />
+                {(chartSeries.impressions || chartSeries.clicks) ? <YAxis yAxisId="volume" orientation="right" tickFormatter={(value) => number(value)} tick={{ fontSize: 11 }} /> : null}
+                {(chartSeries.ctr || chartSeries.conversionRate) ? <YAxis yAxisId="rate" orientation="right" hide domain={[0, "auto"]} /> : null}
+                <Tooltip formatter={(value: number, name: string) => strategyChartTooltip(value, name)} />
+                {chartSeries.organicSales ? <Bar yAxisId="sales" dataKey="organicSales" name="Organic sales" fill="#1D6680" radius={[4, 4, 0, 0]} /> : null}
+                {chartSeries.adSales ? <Bar yAxisId="sales" dataKey="adSales" name="Ad sales" fill="#F47322" radius={[4, 4, 0, 0]} /> : null}
+                {chartSeries.totalSales ? <Line yAxisId="sales" type="monotone" dataKey="totalSales" name="Total sales" stroke="#102A3A" strokeWidth={2.5} dot={false} /> : null}
+                {chartSeries.impressions ? <Line yAxisId="volume" type="monotone" dataKey="impressions" name="Impressions" stroke="#7C3AED" strokeWidth={2.2} dot={false} /> : null}
+                {chartSeries.clicks ? <Line yAxisId="volume" type="monotone" dataKey="clicks" name="Clicks" stroke="#2563EB" strokeWidth={2.2} dot={false} /> : null}
+                {chartSeries.ctr ? <Line yAxisId="rate" type="monotone" dataKey="ctr" name="CTR" stroke="#D97706" strokeWidth={2.2} dot={false} /> : null}
+                {chartSeries.conversionRate ? <Line yAxisId="rate" type="monotone" dataKey="conversionRate" name="Conversion rate" stroke="#059669" strokeWidth={2.2} dot={false} /> : null}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -523,12 +557,13 @@ function StrategyScorecard({
   );
 }
 
-function StrategyMetric({ label, value, delta }: { label: string; value: string; delta: string }) {
+function StrategyMetric({ label, value, delta, current, currentLabel }: { label: string; value: string; delta: string; current?: string; currentLabel?: string }) {
   return (
     <div className="rounded-lg border border-line bg-white p-3 shadow-sm">
       <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-steel">{label}</div>
       <div className="mt-2 text-xl font-extrabold text-ink">{value}</div>
       <div className="mt-1 text-[11px] font-bold text-steel">{delta}</div>
+      {current ? <div className="mt-3 border-t border-line pt-2 text-[11px] text-steel"><span className="font-extrabold text-ink">{current}</span> current through {currentLabel}</div> : null}
     </div>
   );
 }
@@ -670,12 +705,30 @@ function mergeReportingRefresh(current: ReportingState, refreshed: ReportingStat
   };
 }
 
-function metricDelta(current: number, previous?: number, lowerIsBetter = false) {
+function metricDelta(current: number, previous?: number, lowerIsBetter = false, comparisonLabel = "prior month") {
   if (!previous) return "No prior-period comparison";
   const change = (current - previous) / Math.abs(previous);
   const direction = change >= 0 ? "+" : "";
   const interpretation = lowerIsBetter ? (change <= 0 ? "better" : "higher") : change >= 0 ? "growth" : "decline";
-  return `${direction}${(change * 100).toFixed(1)}% vs prior (${interpretation})`;
+  return `${direction}${(change * 100).toFixed(1)}% vs ${comparisonLabel} (${interpretation})`;
+}
+
+type StrategyChartSeries = "organicSales" | "adSales" | "totalSales" | "impressions" | "clicks" | "ctr" | "conversionRate";
+
+const strategyChartOptions: Array<{ key: StrategyChartSeries; label: string; color: string }> = [
+  { key: "organicSales", label: "Organic sales", color: "#1D6680" },
+  { key: "adSales", label: "Ad sales", color: "#F47322" },
+  { key: "totalSales", label: "Total sales", color: "#102A3A" },
+  { key: "impressions", label: "Impressions", color: "#7C3AED" },
+  { key: "clicks", label: "Clicks", color: "#2563EB" },
+  { key: "ctr", label: "CTR", color: "#D97706" },
+  { key: "conversionRate", label: "Conversion rate", color: "#059669" },
+];
+
+function strategyChartTooltip(value: number, name: string) {
+  if (name === "CTR" || name === "Conversion rate") return percent(value);
+  if (name === "Impressions" || name === "Clicks") return number(value);
+  return currency(value);
 }
 
 function displayStrategyPeriod(period: string) {
