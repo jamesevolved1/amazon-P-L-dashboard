@@ -377,6 +377,7 @@ export interface ReportingStrategyMonth {
   ctr: number;
   adSpend: number;
   adSales: number;
+  acos: number;
   roas: number;
   tacos: number;
   cpc: number;

@@ -123,15 +123,6 @@ function amount(row: RawRow, aliases: string[]) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function ratio(row: RawRow, aliases: string[]) {
-  const value = pick(row, aliases);
-  if (typeof value === "number") return Number.isFinite(value) ? (value > 1 ? value / 100 : value) : 0;
-  const raw = String(value ?? "").trim();
-  const parsed = Number(raw.replace(/[$,%\s,]/g, ""));
-  if (!Number.isFinite(parsed)) return 0;
-  return raw.includes("%") || parsed > 1 ? parsed / 100 : parsed;
-}
-
 function normalizeGoogleSheetUrl(url: string) {
   const trimmed = url.trim();
   if (!trimmed) return "";
@@ -329,37 +320,47 @@ function strategyMonthsFromWorkbook(workbook: XLSX.WorkBook): ReportingStrategyM
         return [];
       }
       if (!headers.length || !isStrategyPeriod(first)) return [];
-      const row = headers.reduce<RawRow>((acc, header, index) => {
-        acc[header] = values[index] ?? "";
-        return acc;
-      }, {});
-      const totalSales = amount(row, ["total sales"]);
-      const adSpend = amount(row, ["ad spend"]);
-      const adSales = amount(row, ["ad sales"]);
-      const organicSales = amount(row, ["organic sales"]) || Math.max(0, totalSales - adSales);
+      const totalSales = strategyNumber(values[1]);
+      const adSpend = strategyNumber(values[8]);
+      const adSales = strategyNumber(values[9]);
+      const organicSales = strategyNumber(values[4]) || Math.max(0, totalSales - adSales);
       return [{
         id: `${activeYear}-${cleanHeader(first)}`,
         year: activeYear,
         period: first,
         totalSales,
-        sessions: amount(row, ["sessions"]),
-        conversionRate: ratio(row, ["conv rate", "conversion rate"]),
+        sessions: strategyNumber(values[2]),
+        conversionRate: strategyRatio(values[3]),
         organicSales,
-        impressions: amount(row, ["impressions"]),
-        clicks: amount(row, ["clicks"]),
-        ctr: ratio(row, ["ctr"]),
+        impressions: strategyNumber(values[5]),
+        clicks: strategyNumber(values[6]),
+        ctr: strategyRatio(values[7]),
         adSpend,
         adSales,
-        roas: amount(row, ["roas"]) || (adSpend ? adSales / adSpend : 0),
-        tacos: ratio(row, ["tacos"]) || (totalSales ? adSpend / totalSales : 0),
-        cpc: amount(row, ["cpc"]) || (rowHas(row, ["clicks"]) && amount(row, ["clicks"]) ? adSpend / amount(row, ["clicks"]) : 0),
-        adSalesPercent: ratio(row, ["ad sales %"]) || (totalSales ? adSales / totalSales : 0),
-        organicSalesPercent: ratio(row, ["organic sales %"]) || (totalSales ? organicSales / totalSales : 0),
-        subscriptions: amount(row, ["subscriptions"]),
+        acos: strategyRatio(values[10]) || (adSales ? adSpend / adSales : 0),
+        roas: strategyNumber(values[11]) || (adSpend ? adSales / adSpend : 0),
+        tacos: strategyRatio(values[12]) || (totalSales ? adSpend / totalSales : 0),
+        cpc: strategyNumber(values[13]) || (strategyNumber(values[6]) ? adSpend / strategyNumber(values[6]) : 0),
+        adSalesPercent: strategyRatio(values[14]) || (totalSales ? adSales / totalSales : 0),
+        organicSalesPercent: strategyRatio(values[15]) || (totalSales ? organicSales / totalSales : 0),
+        subscriptions: strategyNumber(values[16]),
         isProjection: cleanHeader(first) === "projection",
       }];
     });
   });
+}
+
+function strategyNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value ?? "").replace(/[$,%\s,]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function strategyRatio(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? (value > 1 ? value / 100 : value) : 0;
+  const raw = String(value ?? "").trim();
+  const parsed = strategyNumber(raw);
+  return raw.includes("%") || parsed > 1 ? parsed / 100 : parsed;
 }
 
 function isStrategyPeriod(value: string) {
@@ -504,7 +505,10 @@ export function normalizeReportingState(state?: Partial<ReportingState> | null):
     products: state?.products ?? [],
     searchTerms: state?.searchTerms ?? [],
     daily: state?.daily ?? [],
-    strategyMonths: state?.strategyMonths ?? [],
+    strategyMonths: (state?.strategyMonths ?? []).map((row) => ({
+      ...row,
+      acos: row.acos ?? (row.adSales ? row.adSpend / row.adSales : 0),
+    })),
     errors: state?.errors ?? [],
   };
 }
