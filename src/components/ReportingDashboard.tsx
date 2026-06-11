@@ -1,16 +1,11 @@
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronDown, CircleDollarSign, Download, FileSpreadsheet, MousePointerClick, Package, RefreshCw, Search, ShoppingCart, Target, TrendingUp, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, ChevronDown, CircleDollarSign, Download, FileSpreadsheet, MousePointerClick, Package, RefreshCw, Search, ShoppingCart, Target, TrendingUp, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   ComposedChart,
-  Legend,
   Line,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -73,45 +68,6 @@ const sampleState: ReportingState = {
   strategyMonths: [],
   errors: [],
 };
-
-const channelMix = [
-  { name: "Sponsored Products", value: 72, color: "#F47322" },
-  { name: "Sponsored Brands", value: 18, color: "#1D6680" },
-  { name: "Sponsored Display", value: 10, color: "#FDBA31" },
-];
-
-const requirements = [
-  {
-    report: "Sponsored Products Advertised Product Report",
-    why: "SKU/ASIN spend, attributed sales, orders, clicks, impressions, CPC, CTR, CVR, and ROAS.",
-    cadence: "Last 30 days and prior 30 days",
-  },
-  {
-    report: "Sponsored Products Campaign Report",
-    why: "Campaign-level pacing, budget, status, campaign type, spend efficiency, top/bottom performers.",
-    cadence: "Last 30 days and prior 30 days",
-  },
-  {
-    report: "Sponsored Brands Campaign + Keyword Reports",
-    why: "Brand campaign spend, sales, keyword performance, search funnel visibility.",
-    cadence: "Last 30 days and prior 30 days",
-  },
-  {
-    report: "Sponsored Display Campaign + Targeting Reports",
-    why: "Retargeting and display performance by campaign, target, and audience.",
-    cadence: "Last 30 days and prior 30 days",
-  },
-  {
-    report: "Search Term Report",
-    why: "Query-level winners, waste, negatives, rank opportunities, and bid decisions.",
-    cadence: "Last 30 days",
-  },
-  {
-    report: "Business Report by Child ASIN",
-    why: "Total sales and units so the dashboard can calculate account and product-level TACOS.",
-    cadence: "Same date range as ads",
-  },
-];
 
 type Period = "7" | "14" | "30" | "all";
 
@@ -240,6 +196,24 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const refreshedLabel = state.lastRefreshedAt ? new Date(state.lastRefreshedAt).toLocaleString() : "Using sample data";
   const topCampaigns = [...baseAdRows].sort((a, b) => b.sales - a.sales).slice(0, 5);
   const weakCampaigns = [...baseAdRows].sort((a, b) => (b.sales ? b.spend / b.sales : 999) - (a.sales ? a.spend / a.sales : 999)).slice(0, 5);
+  const channelSummary = (["SP", "SB", "OTHER"] as const).map((code) => {
+    const matchingRows = baseAdRows.filter((row) => campaignTypeCode(row.type) === code);
+    const spend = matchingRows.reduce((sum, row) => sum + row.spend, 0);
+    const sales = matchingRows.reduce((sum, row) => sum + row.sales, 0);
+    return {
+      code,
+      name: code === "SP" ? "Sponsored Products" : code === "SB" ? "Sponsored Brands" : "Sponsored Display / Other",
+      campaigns: matchingRows.length,
+      spend,
+      sales,
+      roas: spend ? sales / spend : 0,
+      spendShare: totals.spend ? spend / totals.spend : 0,
+      color: code === "SP" ? "#4F46E5" : code === "SB" ? "#10B981" : "#F59E0B",
+    };
+  }).filter((channel) => channel.campaigns > 0);
+  const organicSales = Math.max(0, totalSales - totals.sales);
+  const adSalesShare = totalSales ? totals.sales / totalSales : 0;
+  const organicSalesShare = totalSales ? organicSales / totalSales : 0;
   const strategyMonths = rows.strategyMonths ?? [];
   const latestStrategyMonth = [...strategyMonths].reverse().find((row) => !row.isProjection) ?? null;
   const previousStrategyMonth = latestStrategyMonth ? strategyMonths[strategyMonths.indexOf(latestStrategyMonth) - 1] ?? null : null;
@@ -272,12 +246,16 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
 
   return (
     <section className="grid gap-5">
-      {/* Account header — account name, locale meta, Presentation/sync chips, Sync now button */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="reporting-account-header flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo/10 text-indigo shadow-chip">
-            <BarChart3 className="h-6 w-6" />
-          </div>
+          <div
+            aria-hidden
+            className="h-12 w-12 shrink-0 rounded-xl shadow-chip"
+            style={{
+              background:
+                "linear-gradient(135deg, #C7D2FE 0%, #818CF8 60%, #6366F1 100%)",
+            }}
+          />
           <div className="min-w-0">
             <h2 className="text-2xl font-extrabold tracking-tight text-ink">Amazon Ads Performance</h2>
             <div className="mt-1 text-sm font-bold text-slate">
@@ -297,9 +275,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-700">
-            <span aria-hidden>🎬</span> Presentation ON
-          </span>
           <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-extrabold ${hasImportedData ? "bg-soft text-slate" : "bg-amber-50 text-amber-700"}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${hasImportedData ? "bg-slate" : "bg-amber-500"}`} />
             {hasImportedData ? `Synced · ${refreshedLabel}` : "Out of date · sample data"}
@@ -315,8 +290,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         </div>
       </div>
 
-      {/* Period segmented control + current-period date subtitle */}
-      <div>
+      <div className="reporting-toolbar">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="seg-control">
             {(["7", "14", "30", "all"] as Period[]).map((p) => (
@@ -354,7 +328,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               delta={fmtPct(dSpend)}
               deltaDirection={dirOf(dSpend)}
               upIsGood={false}
-              accent="brand"
+              accent="lavender"
               icon={<Wallet className="h-4 w-4" />}
               helper={`${currency(perDay)}/day`}
             />
@@ -369,12 +343,15 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               helper={`${currency(salesPerDay)}/day`}
             />
             <KpiCard
-              label="Account TACOS"
-              value={percent(accountTacos)}
-              accent="amber"
+              label="ACOS"
+              value={percent(periodAcos)}
+              delta={fmtPct(dAcos)}
+              deltaDirection={dirOf(dAcos)}
+              upIsGood={false}
+              accent="brand"
               emphasizeValue
               icon={<Target className="h-4 w-4" />}
-              helper="ad spend / total sales"
+              helper="ad cost / sales"
             />
             <KpiCard
               label="ROAS"
@@ -382,7 +359,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               delta={fmtPct(dRoas)}
               deltaDirection={dirOf(dRoas)}
               upIsGood
-              accent="indigo"
+              accent="violet"
               emphasizeValue
               icon={<TrendingUp className="h-4 w-4" />}
               helper="sales / ad cost"
@@ -393,7 +370,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               delta={fmtPct(dOrders)}
               deltaDirection={dirOf(dOrders)}
               upIsGood
-              accent="sky"
+              accent="lavender"
               icon={<Package className="h-4 w-4" />}
               helper={`${percent(periodCvr)} CVR`}
             />
@@ -407,10 +384,10 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
 
           {/* KPI cards row 2 — secondary metrics, preserved from your existing data */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-            <KpiCard label="Impressions" value={number(T.impressions)} delta={fmtPct(dImpressions)} deltaDirection={dirOf(dImpressions)} accent="violet" icon={<BarChart3 className="h-4 w-4" />} />
-            <KpiCard label="Clicks" value={number(T.clicks)} delta={fmtPct(dClicks)} deltaDirection={dirOf(dClicks)} accent="violet" icon={<MousePointerClick className="h-4 w-4" />} />
+            <KpiCard label="Impressions" value={number(T.impressions)} delta={fmtPct(dImpressions)} deltaDirection={dirOf(dImpressions)} accent="sky" icon={<BarChart3 className="h-4 w-4" />} />
+            <KpiCard label="Clicks" value={number(T.clicks)} delta={fmtPct(dClicks)} deltaDirection={dirOf(dClicks)} accent="sky" icon={<MousePointerClick className="h-4 w-4" />} />
             <KpiCard label="Total Sales" value={currency(totalSales)} accent="emerald" icon={<CircleDollarSign className="h-4 w-4" />} helper="full account" />
-            <KpiCard label="Conversion Rate" value={percent(periodCvr)} accent="emerald" helper={`${number(T.orders)} orders`} icon={<TrendingUp className="h-4 w-4" />} />
+            <KpiCard label="Account TACOS" value={percent(accountTacos)} accent="amber" emphasizeValue icon={<Target className="h-4 w-4" />} helper="ad spend / total sales" />
             <KpiCard label="CTR" value={percent(periodCtr)} delta={fmtPct(dCtr)} deltaDirection={dirOf(dCtr)} upIsGood accent="rose" icon={<TrendingUp className="h-4 w-4" />} />
             <KpiCard label="CPC" value={currency(periodCpc)} accent="slate" icon={<Wallet className="h-4 w-4" />} helper={periodLabel.toLowerCase()} />
           </div>
@@ -488,29 +465,36 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         </div>
 
         <div className="grid gap-5">
-          {/* By ad product panel — matches the screenshot's right-side card */}
           <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
-            <h3 className="text-lg font-extrabold text-ink">By ad product</h3>
-            <div className="mt-4 grid gap-4">
-              {channelMix.map((channel, idx) => {
-                const code = idx === 0 ? "SP" : idx === 1 ? "SB" : "OTHER";
-                const campaignCount = idx === 0 ? Math.max(1, Math.round(baseAdRows.length * 0.57)) : idx === 1 ? Math.max(1, Math.round(baseAdRows.length * 0.37)) : Math.max(1, Math.round(baseAdRows.length * 0.06));
-                const spend = idx === 0 ? totals.spend * 0.83 : idx === 1 ? totals.spend * 0.16 : totals.spend * 0.01;
-                const sales = idx === 0 ? totals.sales * 0.78 : idx === 1 ? totals.sales * 0.22 : 0;
-                const channelRoas = spend ? sales / spend : 0;
-                const roasTone = channelRoas >= 3 ? "bg-emerald/10 text-emerald" : channelRoas >= 1.5 ? "bg-amber-100 text-amber-700" : "bg-soft text-slate";
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-extrabold text-ink">Ad product performance</h3>
+                <p className="mt-1 text-xs font-medium text-slate">Actual results grouped by campaign type.</p>
+              </div>
+              <span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-extrabold text-slate">{baseAdRows.length} campaigns</span>
+            </div>
+            <div className="mt-5 grid gap-5">
+              {channelSummary.map((channel) => {
+                const roasTone = channel.roas >= 3 ? "bg-emerald/10 text-emerald" : channel.roas >= 1.5 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
                 return (
-                  <div key={channel.name} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-line pb-4 last:border-0 last:pb-0">
-                    <div className="flex h-9 min-w-[44px] items-center justify-center rounded-lg px-2 text-xs font-extrabold text-white" style={{ background: channel.color }}>{code}</div>
-                    <div>
-                      <div className="text-sm font-extrabold text-ink">{channel.name}</div>
-                      <div className="mt-0.5 text-xs font-bold text-slate">{campaignCount} campaigns</div>
-                      <div className="mt-1 flex items-center gap-3 text-xs font-bold text-slate">
-                        <span>Spend <span className="text-ink">{currency(spend)}</span></span>
-                        <span>Sales <span className="text-ink">{currency(sales)}</span></span>
+                  <div key={channel.code}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 min-w-[44px] items-center justify-center rounded-lg px-2 text-xs font-extrabold text-white" style={{ background: channel.color }}>{channel.code}</div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-extrabold text-ink">{channel.name}</div>
+                          <div className="mt-0.5 text-xs font-bold text-slate">{channel.campaigns} campaigns · {percent(channel.spendShare)} of spend</div>
+                        </div>
                       </div>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${roasTone}`}>{channel.roas.toFixed(2)}x ROAS</span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${roasTone}`}>ROAS {channelRoas.toFixed(2)}x</span>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-soft">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, channel.spendShare * 100)}%`, background: channel.color }} />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs font-bold text-slate">
+                      <span>Spend <strong className="text-ink">{currency(channel.spend)}</strong></span>
+                      <span>Ad sales <strong className="text-ink">{currency(channel.sales)}</strong></span>
+                    </div>
                   </div>
                 );
               })}
@@ -518,26 +502,26 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
           </div>
 
           <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><AlertTriangle className="h-4 w-4" /></div>
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-base font-extrabold text-ink">What data we need</h3>
-                <p className="mt-1 text-xs leading-5 text-slate">Pull these from Amazon Ads & Seller Central to go live.</p>
+                <h3 className="text-lg font-extrabold text-ink">Sales mix</h3>
+                <p className="mt-1 text-xs font-medium text-slate">How advertising contributes to total account sales.</p>
               </div>
+              <CircleDollarSign className="h-5 w-5 text-indigo" />
             </div>
-            <div className="mt-4 grid gap-2.5">
-              {requirements.map((item) => (
-                <div key={item.report} className="rounded-xl border border-line bg-canvas p-3">
-                  <div className="flex items-start gap-2">
-                    <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-indigo" />
-                    <div>
-                      <div className="text-xs font-extrabold text-ink">{item.report}</div>
-                      <div className="mt-1 text-[11px] leading-5 text-slate">{item.why}</div>
-                      <div className="mt-2 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold text-slate ring-1 ring-line">{item.cadence}</div>
-                    </div>
-                  </div>
+            <div className="mt-5 grid gap-4">
+              <SalesMixRow label="Ad-attributed sales" value={totals.sales} share={adSalesShare} color="#4F46E5" />
+              <SalesMixRow label="Organic sales" value={organicSales} share={organicSalesShare} color="#10B981" />
+              <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
+                <div className="rounded-xl bg-canvas p-3">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate">Total sales</div>
+                  <div className="mt-2 text-lg font-extrabold text-ink">{currency(totalSales)}</div>
                 </div>
-              ))}
+                <div className="rounded-xl bg-canvas p-3">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate">Account TACOS</div>
+                  <div className="mt-2 text-lg font-extrabold text-ink">{percent(accountTacos)}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -586,20 +570,14 @@ function CampaignsSection({
   topCampaigns: ReportingCampaignRow[];
   weakCampaigns: ReportingCampaignRow[];
 }) {
-  const typeOf = (rawType: string): "SP" | "SB" | "OTHER" => {
-    const t = (rawType || "").toLowerCase();
-    if (t.includes("brand")) return "SB";
-    if (t.includes("product") || t.includes("sponsored products") || t.includes("advertised")) return "SP";
-    return "OTHER";
-  };
   const counts = {
     all: rows.length,
-    SP: rows.filter((r) => typeOf(r.type) === "SP").length,
-    SB: rows.filter((r) => typeOf(r.type) === "SB").length,
-    OTHER: rows.filter((r) => typeOf(r.type) === "OTHER").length,
+    SP: rows.filter((r) => campaignTypeCode(r.type) === "SP").length,
+    SB: rows.filter((r) => campaignTypeCode(r.type) === "SB").length,
+    OTHER: rows.filter((r) => campaignTypeCode(r.type) === "OTHER").length,
   };
   const filtered = rows
-    .filter((r) => (filter === "all" ? true : typeOf(r.type) === filter))
+    .filter((r) => (filter === "all" ? true : campaignTypeCode(r.type) === filter))
     .filter((r) => (search ? `${r.campaign} ${r.type}`.toLowerCase().includes(search.toLowerCase()) : true));
   const sorted = [...filtered].sort((a, b) => {
     if (sort === "spend") return b.spend - a.spend;
@@ -660,7 +638,7 @@ function CampaignsSection({
             {sorted.slice(0, 40).map((row) => {
               const roas = row.spend ? row.sales / row.spend : 0;
               const ctr = row.impressions ? row.clicks / row.impressions : 0;
-              const t = typeOf(row.type);
+              const t = campaignTypeCode(row.type);
               const typeBg = t === "SP" ? "bg-indigo/10 text-indigo" : t === "SB" ? "bg-emerald/10 text-emerald" : "bg-soft text-slate";
               const roasTone = roas >= 4 ? "bg-emerald/10 text-emerald" : roas >= 2.5 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
               return (
@@ -718,6 +696,30 @@ function CampaignsSection({
   );
 }
 
+function SalesMixRow({ label, value, share, color }: { label: string; value: number; share: number; color: string }) {
+  return (
+    <div>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <div className="text-xs font-extrabold text-ink">{label}</div>
+          <div className="mt-1 text-lg font-extrabold text-ink">{currency(value)}</div>
+        </div>
+        <span className="text-sm font-extrabold" style={{ color }}>{percent(share)}</span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-soft">
+        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, share * 100)}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+function campaignTypeCode(rawType: string): "SP" | "SB" | "OTHER" {
+  const type = (rawType || "").toLowerCase();
+  if (type.includes("brand")) return "SB";
+  if (type.includes("product") || type.includes("sponsored products") || type.includes("advertised")) return "SP";
+  return "OTHER";
+}
+
 function StrategyScorecard({
   rows,
   latest,
@@ -755,12 +757,12 @@ function StrategyScorecard({
     setChartSeries((current) => ({ ...current, [series]: !current[series] }));
   };
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
-      <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
+      <div className="flex flex-col gap-3 border-b border-line px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand">Client Strategy Scorecard</div>
-          <h3 className="mt-2 text-xl font-extrabold text-ink">Monthly Business Performance</h3>
-          <p className="mt-1 text-sm text-steel">Live from the Strategy Doc Report tab. This is the client-call view of business and advertising performance together.</p>
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-indigo">Client strategy scorecard</div>
+          <h3 className="mt-2 text-2xl font-extrabold tracking-tight text-ink">Monthly Business Performance</h3>
+          <p className="mt-1 text-sm text-slate">Current pace, month-end projection, and previous-month comparison in one client-ready view.</p>
         </div>
         {latest ? (
           <div className="flex flex-wrap justify-end gap-2">
@@ -776,7 +778,7 @@ function StrategyScorecard({
         ) : null}
       </div>
       {summary ? (
-        <div className="grid gap-3 bg-[#F1F4F8] p-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-3 bg-canvas p-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
           <StrategyMetric label="Projected Total Sales" value={currency(summary.totalSales)} delta={metricDelta(summary.totalSales, comparison?.totalSales, false, comparisonLabel)} current={latest ? currency(latest.totalSales) : undefined} currentLabel={currentThroughLabel} />
           <StrategyMetric label="Projected Organic Sales" value={currency(summary.organicSales)} delta={metricDelta(summary.organicSales, comparison?.organicSales, false, comparisonLabel)} current={latest ? currency(latest.organicSales) : undefined} currentLabel={currentThroughLabel} />
           <StrategyMetric label="Projected Ad Sales" value={currency(summary.adSales)} delta={metricDelta(summary.adSales, comparison?.adSales, false, comparisonLabel)} current={latest ? currency(latest.adSales) : undefined} currentLabel={currentThroughLabel} />
@@ -794,7 +796,7 @@ function StrategyScorecard({
         </div>
       ) : null}
       <div className="grid gap-5 p-5">
-        <div className="rounded-lg border border-line bg-[#FAFAFA] p-5">
+        <div className="rounded-2xl border border-line bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h4 className="text-lg font-extrabold text-ink">Monthly Performance Trend</h4>
@@ -834,7 +836,7 @@ function StrategyScorecard({
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="overflow-hidden rounded-lg border border-line">
+        <div className="overflow-hidden rounded-2xl border border-line bg-white">
           <button type="button" onClick={() => setHistoryOpen((open) => !open)} className="flex w-full items-center justify-between gap-4 bg-white px-5 py-4 text-left hover:bg-warm/50">
             <div>
               <h4 className="text-base font-extrabold text-ink">Monthly Performance History</h4>
@@ -886,11 +888,11 @@ function StrategyScorecard({
 
 function StrategyMetric({ label, value, delta, current, currentLabel }: { label: string; value: string; delta: string; current?: string; currentLabel?: string }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-3 shadow-sm">
-      <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-steel">{label}</div>
-      <div className="mt-2 text-xl font-extrabold text-ink">{value}</div>
-      <div className="mt-1 text-[11px] font-bold text-steel">{delta}</div>
-      {current ? <div className="mt-3 border-t border-line pt-2 text-[11px] text-steel"><span className="font-extrabold text-ink">{current}</span> current through {currentLabel}</div> : null}
+    <div className="rounded-xl border border-line bg-white p-4 shadow-sm transition hover:-translate-y-px hover:border-indigo/20 hover:shadow-card">
+      <div className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-slate">{label}</div>
+      <div className="mt-2 text-2xl font-extrabold tracking-tight text-ink">{value}</div>
+      <div className="mt-1 text-[11px] font-bold text-slate">{delta}</div>
+      {current ? <div className="mt-3 border-t border-line pt-2 text-[11px] text-slate"><span className="font-extrabold text-ink">{current}</span> current through {currentLabel}</div> : null}
     </div>
   );
 }

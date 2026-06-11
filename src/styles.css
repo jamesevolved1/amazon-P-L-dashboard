@@ -27,10 +27,13 @@
   --ec-orange: #f47322;
   --ec-orange-deep: #d9541f;
   --ec-gold: #fdba31;
-  --ec-canvas: #f8fafc;
-  --ec-soft: #eef2f6;
-  --ec-line: #e2e8f0;
+  --ec-canvas: #f7f8fc;
+  --ec-soft: #eef0f8;
+  --ec-line: #e6e8f0;
+  --ec-royal: #2563eb;
   --ec-indigo: #4f46e5;
+  --ec-lavender: #a5b4fc;
+  --ec-violet: #7c3aed;
   --ec-emerald: #10b981;
   --ec-sky: #0ea5e9;
 }
@@ -44,7 +47,11 @@ body {
   font-family:
     Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: #ffffff;
+  background: #fafbfd;
+  background-image:
+    radial-gradient(1100px 520px at 8% -10%, rgba(165, 180, 252, 0.18), transparent 60%),
+    radial-gradient(900px 480px at 100% 110%, rgba(124, 58, 237, 0.10), transparent 60%);
+  background-attachment: fixed;
   color: var(--ec-ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -100,7 +107,25 @@ select {
 }
 
 .app-shell {
+  background: transparent;
+}
+
+.reporting-account-header {
+  border: 1px solid var(--ec-line);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #ffffff 0%, #fbfcff 72%, #f5f7ff 100%);
+  padding: 1.25rem;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 18px 42px -32px rgba(79, 70, 229, 0.38);
+}
+
+.reporting-toolbar {
+  border: 1px solid var(--ec-line);
+  border-radius: 0.9rem;
   background: #ffffff;
+  padding: 0.7rem 0.8rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -160,8 +185,18 @@ select {
   border: 1px solid var(--ec-line);
   border-radius: 1rem;
   padding: 1.25rem 1.25rem 1.1rem 1.25rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -18px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 34px -26px rgba(15, 23, 42, 0.28);
   overflow: hidden;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.kpi-card:hover {
+  border-color: rgba(79, 70, 229, 0.2);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05), 0 18px 38px -24px rgba(15, 23, 42, 0.32);
+  transform: translateY(-1px);
 }
 
 .kpi-card::before {
@@ -170,20 +205,31 @@ select {
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
-  background: var(--kpi-accent, var(--ec-indigo));
+  height: 2.5px;
+  background:
+    linear-gradient(90deg,
+      transparent 0%,
+      var(--kpi-accent, var(--ec-royal)) 18%,
+      var(--kpi-accent, var(--ec-royal)) 82%,
+      transparent 100%);
+  opacity: 0.95;
   border-top-left-radius: 1rem;
   border-top-right-radius: 1rem;
 }
 
-.kpi-card[data-accent="brand"] { --kpi-accent: #f47322; }
-.kpi-card[data-accent="indigo"] { --kpi-accent: #4f46e5; }
-.kpi-card[data-accent="sky"] { --kpi-accent: #0ea5e9; }
-.kpi-card[data-accent="emerald"] { --kpi-accent: #10b981; }
-.kpi-card[data-accent="violet"] { --kpi-accent: #8b5cf6; }
-.kpi-card[data-accent="amber"] { --kpi-accent: #f59e0b; }
-.kpi-card[data-accent="rose"] { --kpi-accent: #f43f5e; }
-.kpi-card[data-accent="slate"] { --kpi-accent: #64748b; }
+.kpi-card[data-accent="brand"] { --kpi-accent: #f47322; --kpi-tile-bg: #fff1e6; --kpi-tile-fg: #c2410c; }
+.kpi-card[data-accent="lavender"] { --kpi-accent: #a5b4fc; --kpi-tile-bg: #eef0ff; --kpi-tile-fg: #4338ca; }
+.kpi-card[data-accent="indigo"] { --kpi-accent: #6366f1; --kpi-tile-bg: #eef0ff; --kpi-tile-fg: #4338ca; }
+.kpi-card[data-accent="royal"] { --kpi-accent: #2563eb; --kpi-tile-bg: #e8efff; --kpi-tile-fg: #1d4ed8; }
+.kpi-card[data-accent="sky"] { --kpi-accent: #0ea5e9; --kpi-tile-bg: #e0f2fe; --kpi-tile-fg: #0369a1; }
+.kpi-card[data-accent="emerald"] { --kpi-accent: #10b981; --kpi-tile-bg: #dcfce7; --kpi-tile-fg: #047857; }
+.kpi-card[data-accent="violet"] { --kpi-accent: #7c3aed; --kpi-tile-bg: #f1ebff; --kpi-tile-fg: #6d28d9; }
+.kpi-card[data-accent="amber"] { --kpi-accent: #f59e0b; --kpi-tile-bg: #fef3c7; --kpi-tile-fg: #b45309; }
+.kpi-card[data-accent="rose"] { --kpi-accent: #f43f5e; --kpi-tile-bg: #ffe4e6; --kpi-tile-fg: #be123c; }
+.kpi-card[data-accent="slate"] { --kpi-accent: #94a3b8; --kpi-tile-bg: #f1f5f9; --kpi-tile-fg: #475569; }
+
+/* Soft icon tile color follows the accent */
+.kpi-card .icon-tile { background: var(--kpi-tile-bg, #f1f5f9); color: var(--kpi-tile-fg, #475569); }
 
 /* Segmented control (period toggle) */
 .seg-control {

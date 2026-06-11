@@ -1,7 +1,17 @@
 import type { ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
-type Accent = "indigo" | "brand" | "sky" | "emerald" | "violet" | "amber" | "rose" | "slate";
+type Accent =
+  | "indigo"
+  | "lavender"
+  | "royal"
+  | "brand"
+  | "sky"
+  | "emerald"
+  | "violet"
+  | "amber"
+  | "rose"
+  | "slate";
 
 interface KpiCardProps {
   label: string;
@@ -12,24 +22,13 @@ interface KpiCardProps {
   deltaDirection?: "up" | "down" | "flat";
   /** Whether an "up" delta is good (default true). Set false for metrics like ACOS where lower is better. */
   upIsGood?: boolean;
-  /** Color of the top accent stripe and value emphasis. */
+  /** Color of the top accent stripe and icon tile tint. */
   accent?: Accent;
   tone?: "neutral" | "good" | "warn" | "bad";
   icon?: ReactNode;
-  /** When true, the value is rendered in the accent color to match the screenshot's blue numbers. */
+  /** When true, the value is rendered in a deep royal blue — matches the screenshot's ACOS / ROAS numbers. */
   emphasizeValue?: boolean;
 }
-
-const accentValueColor: Record<Accent, string> = {
-  indigo: "text-[#4F46E5]",
-  brand: "text-[#F47322]",
-  sky: "text-[#0EA5E9]",
-  emerald: "text-[#10B981]",
-  violet: "text-[#8B5CF6]",
-  amber: "text-[#F59E0B]",
-  rose: "text-[#F43F5E]",
-  slate: "text-ink",
-};
 
 export function KpiCard({
   label,
@@ -38,7 +37,7 @@ export function KpiCard({
   delta,
   deltaDirection = "flat",
   upIsGood = true,
-  accent = "indigo",
+  accent = "lavender",
   icon,
   emphasizeValue = false,
 }: KpiCardProps) {
@@ -47,14 +46,14 @@ export function KpiCard({
   if (deltaDirection === "down") chipTone = upIsGood ? "bad" : "good";
 
   return (
-    <div className="kpi-card min-h-[124px]" data-accent={accent}>
+    <div className="kpi-card min-h-[128px]" data-accent={accent}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.15em] text-slate">{label}</p>
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-slate">{label}</p>
         {icon ? <div className="icon-tile">{icon}</div> : null}
       </div>
       <div
-        className={`mt-3 text-[26px] leading-none font-extrabold tracking-tight ${
-          emphasizeValue ? accentValueColor[accent] : "text-ink"
+        className={`mt-3 text-[30px] leading-none font-bold tracking-tight ${
+          emphasizeValue ? "text-[#1F4FE0]" : "text-ink"
         }`}
       >
         {value}
@@ -70,7 +69,7 @@ export function KpiCard({
             {delta}
           </span>
         ) : null}
-        {helper ? <span className="text-xs font-medium text-steel">{helper}</span> : null}
+        {helper ? <span className="text-xs font-semibold text-slate">{helper}</span> : null}
       </div>
     </div>
   );
