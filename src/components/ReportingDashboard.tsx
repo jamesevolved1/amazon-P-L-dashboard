@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronDown, CircleDollarSign, Download, FileSpreadsheet, Filter, MousePointerClick, Package, RefreshCw, ShoppingCart, Target, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronDown, CircleDollarSign, Download, FileSpreadsheet, MousePointerClick, Package, RefreshCw, Search, ShoppingCart, Target, TrendingUp, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
@@ -113,9 +113,15 @@ const requirements = [
   },
 ];
 
+type Period = "7" | "14" | "30" | "all";
+
 export function ReportingDashboard({ state, onStateChange }: { state: ReportingState; onStateChange: (state: ReportingState) => void }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [strategySourceOpen, setStrategySourceOpen] = useState(false);
+  const [period, setPeriod] = useState<Period>("7");
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState<"all" | "SP" | "SB" | "OTHER">("all");
+  const [campaignSort, setCampaignSort] = useState<"spend" | "sales" | "orders" | "acos" | "roas">("spend");
   const [strategySheetUrl, setStrategySheetUrl] = useState(state.sourceConfig.strategySheetUrl ?? "");
   const autoRefreshedStrategyUrl = useRef("");
   useEffect(() => setStrategySheetUrl(state.sourceConfig.strategySheetUrl ?? ""), [state.sourceConfig.strategySheetUrl]);
@@ -163,11 +169,71 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
       : productData.length
         ? productData.reduce((sum, row) => sum + (row.totalSales || 0), 0)
         : totals.sales;
-  const dailyData = rows.daily.length
+  const dailyDataAll = rows.daily.length
     ? rows.daily
     : hasImportedRows
       ? [{ day: "Imported", spend: totals.spend, sales: totals.sales, impressions: totals.impressions, clicks: totals.clicks, orders: totals.orders }]
       : sampleState.daily;
+  // Slice the daily series by the selected period — the chart and "current period" labels follow this.
+  const periodDays = period === "all" ? dailyDataAll.length : Number(period);
+  const dailyData = dailyDataAll.slice(-periodDays);
+  // Add a synthetic CVR percentage to the chart so the right axis works without changing data shape.
+  const dailyChartData = dailyData.map((d) => ({
+    ...d,
+    cvr: d.clicks ? +((d.orders || 0) / d.clicks * 100).toFixed(2) : (d.impressions ? +((d.clicks / d.impressions) * 100).toFixed(2) : 0),
+  }));
+  const periodLabel = period === "7" ? "Last 7 days" : period === "14" ? "Last 14 days" : period === "30" ? "Last 30 days" : "All synced";
+  const currentRangeLabel = dailyData.length > 1
+    ? `${dailyData[0].day} → ${dailyData[dailyData.length - 1].day}`
+    : `${dailyData[0]?.day ?? ""}`;
+  // Comparison window is the same length immediately before the current window.
+  const prevSlice = dailyDataAll.slice(Math.max(0, dailyDataAll.length - periodDays * 2), Math.max(0, dailyDataAll.length - periodDays));
+  const previousRangeLabel = prevSlice.length > 1 ? `${prevSlice[0].day} → ${prevSlice[prevSlice.length - 1].day}` : "previous period";
+
+  // Period-specific totals so KPI cards respond to the segmented control.
+  const periodTotals = dailyData.reduce(
+    (acc, row) => ({
+      spend: acc.spend + (row.spend || 0),
+      sales: acc.sales + (row.sales || 0),
+      impressions: acc.impressions + (row.impressions || 0),
+      clicks: acc.clicks + (row.clicks || 0),
+      orders: acc.orders + (row.orders || 0),
+    }),
+    { spend: 0, sales: 0, impressions: 0, clicks: 0, orders: 0 },
+  );
+  const prevTotals = prevSlice.reduce(
+    (acc, row) => ({
+      spend: acc.spend + (row.spend || 0),
+      sales: acc.sales + (row.sales || 0),
+      impressions: acc.impressions + (row.impressions || 0),
+      clicks: acc.clicks + (row.clicks || 0),
+      orders: acc.orders + (row.orders || 0),
+    }),
+    { spend: 0, sales: 0, impressions: 0, clicks: 0, orders: 0 },
+  );
+  const useDailyForTotals = dailyData.length > 0 && (periodTotals.spend > 0 || periodTotals.sales > 0);
+  const T = useDailyForTotals ? periodTotals : totals;
+  const periodRoas = T.spend ? T.sales / T.spend : 0;
+  const periodAcos = T.sales ? T.spend / T.sales : 0;
+  const periodCtr = T.impressions ? T.clicks / T.impressions : 0;
+  const periodCpc = T.clicks ? T.spend / T.clicks : 0;
+  const periodCvr = T.clicks ? T.orders / T.clicks : 0;
+  const pct = (cur: number, prev: number) => (prev ? ((cur - prev) / Math.abs(prev)) * 100 : 0);
+  const dSpend = pct(T.spend, prevTotals.spend);
+  const dSales = pct(T.sales, prevTotals.sales);
+  const dOrders = pct(T.orders, prevTotals.orders);
+  const dImpressions = pct(T.impressions, prevTotals.impressions);
+  const dClicks = pct(T.clicks, prevTotals.clicks);
+  const prevRoas = prevTotals.spend ? prevTotals.sales / prevTotals.spend : 0;
+  const prevAcos = prevTotals.sales ? prevTotals.spend / prevTotals.sales : 0;
+  const prevCtr = prevTotals.impressions ? prevTotals.clicks / prevTotals.impressions : 0;
+  const dRoas = pct(periodRoas, prevRoas);
+  const dAcos = pct(periodAcos, prevAcos);
+  const dCtr = pct(periodCtr, prevCtr);
+  const dirOf = (n: number): "up" | "down" | "flat" => (n > 0.05 ? "up" : n < -0.05 ? "down" : "flat");
+  const fmtPct = (n: number) => `${Math.abs(n).toFixed(1)}%`;
+  const perDay = T.spend && dailyData.length ? T.spend / dailyData.length : 0;
+  const salesPerDay = T.sales && dailyData.length ? T.sales / dailyData.length : 0;
   const roas = totals.spend ? totals.sales / totals.spend : 0;
   const accountTacos = totalSales ? totals.spend / totalSales : 0;
   const ctr = totals.impressions ? totals.clicks / totals.impressions : 0;
@@ -208,101 +274,108 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   };
 
   return (
-    <section className="grid gap-6">
-      {/* Header: clean white panel with title, sync chip, period segmented control */}
-      <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="grid gap-5">
+      {/* Account header — account name, locale meta, Presentation/sync chips, Sync now button */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo/10 text-indigo shadow-chip">
+            <BarChart3 className="h-6 w-6" />
+          </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo/10 text-indigo">
-                <BarChart3 className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate">Reporting Dashboard</div>
-                <h2 className="text-xl font-extrabold text-ink">Amazon Ads Performance</h2>
-              </div>
+            <h2 className="text-2xl font-extrabold tracking-tight text-ink">Amazon Ads Performance</h2>
+            <div className="mt-1 text-sm font-bold text-slate">
+              <span>US · USD</span>
+              <span className="mx-2 text-mute">·</span>
+              <span>{baseAdRows.length} campaigns</span>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-extrabold ${hasImportedData ? "bg-emerald/10 text-emerald" : "bg-amber-100 text-amber-700"}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${hasImportedData ? "bg-emerald" : "bg-amber-500"}`} />
-                {hasImportedData ? `Synced · ${refreshedLabel}` : "Sample data · connect a sheet to go live"}
-              </span>
-              <span className="text-mute">·</span>
-              <span className="font-bold text-slate">{baseAdRows.length} campaigns</span>
+            <div className="mt-2 text-xs text-mute">
+              {hasImportedData ? `Last sync: ${refreshedLabel}` : `Sample data · ${refreshedLabel}`}
+              {dailyDataAll.length > 1 ? (
+                <>
+                  <span className="mx-2">·</span>
+                  History: {dailyDataAll[0].day} → {dailyDataAll[dailyDataAll.length - 1].day} ({dailyDataAll.length} days)
+                </>
+              ) : null}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="pill-button">
-              <Filter className="h-4 w-4" />
-              All campaigns
-            </button>
-            <button
-              onClick={() => setStrategySourceOpen((open) => !open)}
-              className="pill-button"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-700">
+            <span aria-hidden>🎬</span> Presentation ON
+          </span>
+          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-extrabold ${hasImportedData ? "bg-soft text-slate" : "bg-amber-50 text-amber-700"}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${hasImportedData ? "bg-slate" : "bg-amber-500"}`} />
+            {hasImportedData ? `Synced · ${refreshedLabel}` : "Out of date · sample data"}
+          </span>
+          <button
+            onClick={refreshSheets}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs font-extrabold text-white shadow-chip transition hover:bg-navy disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Syncing" : "Sync now"}
+          </button>
+        </div>
+      </div>
+
+      {/* Period segmented control + current-period date subtitle */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="seg-control">
+            {(["7", "14", "30", "all"] as Period[]).map((p) => (
+              <button key={p} aria-pressed={period === p} onClick={() => setPeriod(p)}>
+                {p === "all" ? "All synced" : `Last ${p} days`}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setStrategySourceOpen((open) => !open)} className="pill-button text-xs">
+              <FileSpreadsheet className="h-3.5 w-3.5" />
               Strategy Doc
-              <ChevronDown className={`h-4 w-4 transition ${strategySourceOpen ? "rotate-180" : ""}`} />
+              <ChevronDown className={`h-3.5 w-3.5 transition ${strategySourceOpen ? "rotate-180" : ""}`} />
             </button>
-            <button className="pill-button">
-              <Download className="h-4 w-4" />
+            <button className="pill-button text-xs">
+              <Download className="h-3.5 w-3.5" />
               Export
-            </button>
-            <button
-              onClick={refreshSheets}
-              disabled={isRefreshing}
-              className="pill-button bg-brand"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-              {isRefreshing ? "Syncing" : "Sync now"}
             </button>
           </div>
         </div>
-
-        {/* Period segmented control */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="seg-control">
-            <button aria-pressed="true">Last 7 days</button>
-            <button aria-pressed="false">Last 14 days</button>
-            <button aria-pressed="false">Last 30 days</button>
-            <button aria-pressed="false">All synced</button>
-          </div>
-          <div className="text-xs font-bold text-slate">
-            <CalendarDays className="mr-1 inline h-3.5 w-3.5 -mt-0.5" />
-            vs previous period
-          </div>
+        <div className="mt-2 text-xs font-bold text-slate">
+          {currentRangeLabel}
+          <span className="mx-2 text-mute">·</span>
+          <span className="font-bold text-mute">{dailyData.length} days of data</span>
         </div>
       </div>
 
       {!strategyMonths.length ? (
         <>
-          {/* KPI cards row 1 — headline metrics in the screenshot's style */}
+          {/* KPI cards row 1 — headline metrics, period-aware */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <KpiCard
               label="Ad Spend"
-              value={currency(totals.spend)}
-              delta="31.6%"
-              deltaDirection="up"
+              value={currency(T.spend)}
+              delta={fmtPct(dSpend)}
+              deltaDirection={dirOf(dSpend)}
               upIsGood={false}
               accent="brand"
               icon={<Wallet className="h-4 w-4" />}
-              helper="per day"
+              helper={`${currency(perDay)}/day`}
             />
             <KpiCard
               label="Attributed Sales"
-              value={currency(totals.sales)}
-              delta="37.9%"
-              deltaDirection="up"
+              value={currency(T.sales)}
+              delta={fmtPct(dSales)}
+              deltaDirection={dirOf(dSales)}
               upIsGood
               accent="emerald"
               icon={<ShoppingCart className="h-4 w-4" />}
-              helper="per day"
+              helper={`${currency(salesPerDay)}/day`}
             />
             <KpiCard
               label="ACOS"
-              value={percent(totals.sales ? totals.spend / totals.sales : 0)}
-              delta="4.5%"
-              deltaDirection="down"
+              value={percent(periodAcos)}
+              delta={fmtPct(dAcos)}
+              deltaDirection={dirOf(dAcos)}
               upIsGood={false}
               accent="indigo"
               emphasizeValue
@@ -311,9 +384,9 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             />
             <KpiCard
               label="ROAS"
-              value={`${roas.toFixed(2)}x`}
-              delta="4.7%"
-              deltaDirection="up"
+              value={`${periodRoas.toFixed(2)}x`}
+              delta={fmtPct(dRoas)}
+              deltaDirection={dirOf(dRoas)}
               upIsGood
               accent="indigo"
               emphasizeValue
@@ -322,24 +395,30 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             />
             <KpiCard
               label="Orders"
-              value={number(totals.orders)}
-              delta="35.9%"
-              deltaDirection="up"
+              value={number(T.orders)}
+              delta={fmtPct(dOrders)}
+              deltaDirection={dirOf(dOrders)}
               upIsGood
               accent="sky"
               icon={<Package className="h-4 w-4" />}
-              helper={`${percent(conversionRate)} CVR`}
+              helper={`${percent(periodCvr)} CVR`}
             />
+          </div>
+
+          <div className="text-xs font-bold text-slate">
+            vs previous period
+            <span className="mx-2 text-mute">·</span>
+            <span className="text-mute">{previousRangeLabel}</span>
           </div>
 
           {/* KPI cards row 2 — secondary metrics, preserved from your existing data */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-            <KpiCard label="Impressions" value={number(totals.impressions)} delta="2.3%" deltaDirection="up" accent="violet" icon={<BarChart3 className="h-4 w-4" />} />
-            <KpiCard label="Clicks" value={number(totals.clicks)} delta="6.6%" deltaDirection="up" accent="violet" icon={<MousePointerClick className="h-4 w-4" />} />
-            <KpiCard label="Total Sales" value={currency(totalSales)} delta="12.7%" deltaDirection="up" upIsGood accent="emerald" icon={<CircleDollarSign className="h-4 w-4" />} />
+            <KpiCard label="Impressions" value={number(T.impressions)} delta={fmtPct(dImpressions)} deltaDirection={dirOf(dImpressions)} accent="violet" icon={<BarChart3 className="h-4 w-4" />} />
+            <KpiCard label="Clicks" value={number(T.clicks)} delta={fmtPct(dClicks)} deltaDirection={dirOf(dClicks)} accent="violet" icon={<MousePointerClick className="h-4 w-4" />} />
+            <KpiCard label="Total Sales" value={currency(totalSales)} accent="emerald" icon={<CircleDollarSign className="h-4 w-4" />} helper="full account" />
             <KpiCard label="Account TACOS" value={percent(accountTacos)} accent="amber" helper="spend / total sales" icon={<Target className="h-4 w-4" />} />
-            <KpiCard label="CTR" value={percent(ctr)} delta="0.8pp" deltaDirection="up" upIsGood accent="rose" icon={<TrendingUp className="h-4 w-4" />} />
-            <KpiCard label="CPC" value={currency(cpc)} delta="6.6%" deltaDirection="up" upIsGood={false} accent="slate" icon={<Wallet className="h-4 w-4" />} />
+            <KpiCard label="CTR" value={percent(periodCtr)} delta={fmtPct(dCtr)} deltaDirection={dirOf(dCtr)} upIsGood accent="rose" icon={<TrendingUp className="h-4 w-4" />} />
+            <KpiCard label="CPC" value={currency(periodCpc)} accent="slate" icon={<Wallet className="h-4 w-4" />} helper={periodLabel.toLowerCase()} />
           </div>
         </>
       ) : null}
@@ -384,11 +463,11 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
                 <h3 className="text-lg font-extrabold text-ink">Daily spend vs sales</h3>
                 <p className="mt-1 text-sm text-slate">Sales, spend, and CVR over the selected window.</p>
               </div>
-              <span className="text-xs font-extrabold text-slate">last 7 days</span>
+              <span className="text-xs font-extrabold text-slate">{periodLabel.toLowerCase()}</span>
             </div>
             <div className="mt-4 h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={dailyData} margin={{ top: 10, right: 8, left: 0, bottom: 4 }}>
+                <ComposedChart data={dailyChartData} margin={{ top: 10, right: 8, left: 0, bottom: 4 }}>
                   <defs>
                     <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0F172A" stopOpacity={0.18} />
@@ -398,11 +477,11 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
                   <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F6" vertical={false} />
                   <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={{ stroke: "#E2E8F0" }} />
                   <YAxis yAxisId="money" tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 11, fill: "#10B981" }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 11, fill: "#10B981" }} tickLine={false} axisLine={false} domain={[0, "auto"]} />
                   <Tooltip formatter={(value: number, name) => (String(name).toLowerCase().includes("cvr") ? `${value}%` : currency(value))} contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", boxShadow: "0 8px 24px -12px rgba(15,23,42,0.18)" }} />
                   <Area yAxisId="money" type="monotone" dataKey="sales" name="Sales" stroke="#0F172A" strokeWidth={2.4} fill="url(#salesGradient)" />
                   <Line yAxisId="money" type="monotone" dataKey="spend" name="Spend" stroke="#0EA5E9" strokeWidth={2.2} dot={false} />
-                  <Line yAxisId="rate" type="monotone" dataKey="impressions" name="CVR" stroke="#10B981" strokeWidth={2.2} dot={false} />
+                  <Line yAxisId="rate" type="monotone" dataKey="cvr" name="CVR" stroke="#10B981" strokeWidth={2.2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -411,11 +490,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky" />Spend</span>
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald" />CVR</span>
             </div>
-          </div>
-
-          <div className="grid gap-5 lg:grid-cols-2">
-            <CampaignTable title="Top Campaigns" rows={topCampaigns} />
-            <CampaignTable title="Needs Attention" rows={weakCampaigns} />
           </div>
         </div>
 
@@ -475,11 +549,188 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         </div>
       </div> : null}
 
+      {!strategyMonths.length ? (
+        <CampaignsSection
+          rows={baseAdRows}
+          search={campaignSearch}
+          onSearch={setCampaignSearch}
+          filter={campaignFilter}
+          onFilter={setCampaignFilter}
+          sort={campaignSort}
+          onSort={setCampaignSort}
+          topCampaigns={topCampaigns}
+          weakCampaigns={weakCampaigns}
+        />
+      ) : null}
+
       {!strategyMonths.length ? <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <ProductPerformanceTable rows={productData} />
         <BudgetPacing campaigns={campaignData} />
       </div> : null}
     </section>
+  );
+}
+
+function CampaignsSection({
+  rows,
+  search,
+  onSearch,
+  filter,
+  onFilter,
+  sort,
+  onSort,
+  topCampaigns,
+  weakCampaigns,
+}: {
+  rows: ReportingCampaignRow[];
+  search: string;
+  onSearch: (value: string) => void;
+  filter: "all" | "SP" | "SB" | "OTHER";
+  onFilter: (value: "all" | "SP" | "SB" | "OTHER") => void;
+  sort: "spend" | "sales" | "orders" | "acos" | "roas";
+  onSort: (value: "spend" | "sales" | "orders" | "acos" | "roas") => void;
+  topCampaigns: ReportingCampaignRow[];
+  weakCampaigns: ReportingCampaignRow[];
+}) {
+  const typeOf = (rawType: string): "SP" | "SB" | "OTHER" => {
+    const t = (rawType || "").toLowerCase();
+    if (t.includes("brand")) return "SB";
+    if (t.includes("product") || t.includes("sponsored products") || t.includes("advertised")) return "SP";
+    return "OTHER";
+  };
+  const counts = {
+    all: rows.length,
+    SP: rows.filter((r) => typeOf(r.type) === "SP").length,
+    SB: rows.filter((r) => typeOf(r.type) === "SB").length,
+    OTHER: rows.filter((r) => typeOf(r.type) === "OTHER").length,
+  };
+  const filtered = rows
+    .filter((r) => (filter === "all" ? true : typeOf(r.type) === filter))
+    .filter((r) => (search ? `${r.campaign} ${r.type}`.toLowerCase().includes(search.toLowerCase()) : true));
+  const sorted = [...filtered].sort((a, b) => {
+    if (sort === "spend") return b.spend - a.spend;
+    if (sort === "sales") return b.sales - a.sales;
+    if (sort === "orders") return b.orders - a.orders;
+    const aAcos = a.sales ? a.spend / a.sales : 999;
+    const bAcos = b.sales ? b.spend / b.sales : 999;
+    if (sort === "acos") return aAcos - bAcos;
+    const aRoas = a.spend ? a.sales / a.spend : 0;
+    const bRoas = b.spend ? b.sales / b.spend : 0;
+    return bRoas - aRoas;
+  });
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
+        <h3 className="text-lg font-extrabold text-ink">Campaigns</h3>
+        <div className="relative ml-2 flex-1 min-w-[220px] max-w-[420px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-mute" />
+          <input
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Search campaigns, ID, product…"
+            className="w-full rounded-full border border-line bg-canvas px-9 py-2 text-xs font-bold text-ink outline-none placeholder:text-mute focus:border-ink"
+          />
+        </div>
+        <div className="seg-control">
+          {(["all", "SP", "SB", "OTHER"] as const).map((f) => (
+            <button key={f} aria-pressed={filter === f} onClick={() => onFilter(f)}>
+              {f === "all" ? "All" : f} ({counts[f]})
+            </button>
+          ))}
+        </div>
+        <div className="relative">
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value as typeof sort)}
+            className="appearance-none rounded-full border border-line bg-white px-3 pr-7 py-2 text-xs font-extrabold text-ink outline-none focus:border-ink"
+          >
+            <option value="spend">Sort: Spend</option>
+            <option value="sales">Sort: Sales</option>
+            <option value="orders">Sort: Orders</option>
+            <option value="acos">Sort: ACOS</option>
+            <option value="roas">Sort: ROAS</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate" />
+        </div>
+      </div>
+      <div className="overflow-auto">
+        <table className="w-full min-w-[920px] text-sm">
+          <thead className="bg-canvas text-[10.5px] uppercase tracking-[0.12em] text-slate">
+            <tr>
+              <th className="border-b border-line px-5 py-3 text-left font-extrabold">Campaign</th>
+              <th className="border-b border-line px-3 py-3 text-left font-extrabold">Type</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">Spend</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">Sales</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">Orders</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">ACOS</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">ROAS</th>
+              <th className="border-b border-line px-5 py-3 text-right font-extrabold">CTR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.slice(0, 40).map((row) => {
+              const acos = row.sales ? row.spend / row.sales : 0;
+              const roas = row.spend ? row.sales / row.spend : 0;
+              const ctr = row.impressions ? row.clicks / row.impressions : 0;
+              const t = typeOf(row.type);
+              const typeBg = t === "SP" ? "bg-indigo/10 text-indigo" : t === "SB" ? "bg-emerald/10 text-emerald" : "bg-soft text-slate";
+              const acosTone = acos < 0.25 ? "bg-emerald/10 text-emerald" : acos < 0.4 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+              const roasTone = roas >= 4 ? "bg-emerald/10 text-emerald" : roas >= 2.5 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+              return (
+                <tr key={row.campaign} className="hover:bg-canvas">
+                  <td className="border-b border-line px-5 py-3.5">
+                    <div className="font-extrabold text-ink">{row.campaign}</div>
+                    <div className="mt-0.5 text-[11px] font-bold text-mute">{row.status}</div>
+                  </td>
+                  <td className="border-b border-line px-3 py-3.5">
+                    <span className={`inline-flex rounded-md px-2 py-1 text-[10.5px] font-extrabold ${typeBg}`}>{t}</span>
+                  </td>
+                  <td className="border-b border-line px-3 py-3.5 text-right text-ink">{currency(row.spend)}</td>
+                  <td className="border-b border-line px-3 py-3.5 text-right font-extrabold text-ink">{currency(row.sales)}</td>
+                  <td className="border-b border-line px-3 py-3.5 text-right text-ink">{number(row.orders)}</td>
+                  <td className="border-b border-line px-3 py-3.5 text-right">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ${acosTone}`}>{percent(acos)}</span>
+                  </td>
+                  <td className="border-b border-line px-3 py-3.5 text-right">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ${roasTone}`}>{roas.toFixed(2)}x</span>
+                  </td>
+                  <td className="border-b border-line px-5 py-3.5 text-right text-slate">{percent(ctr)}</td>
+                </tr>
+              );
+            })}
+            {sorted.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-5 py-10 text-center text-sm text-slate">No campaigns match the current filter.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+      <div className="grid gap-3 border-t border-line bg-canvas p-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-line bg-white p-3">
+          <div className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-slate">Top by sales</div>
+          <ul className="mt-1.5 space-y-1 text-xs text-ink">
+            {topCampaigns.slice(0, 3).map((c) => (
+              <li key={`top-${c.campaign}`} className="flex items-center justify-between gap-3">
+                <span className="truncate font-bold">{c.campaign}</span>
+                <span className="shrink-0 font-extrabold">{currency(c.sales)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-xl border border-line bg-white p-3">
+          <div className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-slate">Needs attention</div>
+          <ul className="mt-1.5 space-y-1 text-xs text-ink">
+            {weakCampaigns.slice(0, 3).map((c) => (
+              <li key={`weak-${c.campaign}`} className="flex items-center justify-between gap-3">
+                <span className="truncate font-bold">{c.campaign}</span>
+                <span className="shrink-0 font-extrabold text-rose-700">{percent(c.sales ? c.spend / c.sales : 0)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }
 
