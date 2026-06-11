@@ -170,6 +170,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const useDailyForTotals = dailyData.length > 0 && (periodTotals.spend > 0 || periodTotals.sales > 0);
   const T = useDailyForTotals ? periodTotals : totals;
   const periodRoas = T.spend ? T.sales / T.spend : 0;
+  const periodAcos = T.sales ? T.spend / T.sales : 0;
   const periodCtr = T.impressions ? T.clicks / T.impressions : 0;
   const periodCpc = T.clicks ? T.spend / T.clicks : 0;
   const periodCvr = T.clicks ? T.orders / T.clicks : 0;
@@ -180,8 +181,10 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const dImpressions = pct(T.impressions, prevTotals.impressions);
   const dClicks = pct(T.clicks, prevTotals.clicks);
   const prevRoas = prevTotals.spend ? prevTotals.sales / prevTotals.spend : 0;
+  const prevAcos = prevTotals.sales ? prevTotals.spend / prevTotals.sales : 0;
   const prevCtr = prevTotals.impressions ? prevTotals.clicks / prevTotals.impressions : 0;
   const dRoas = pct(periodRoas, prevRoas);
+  const dAcos = pct(periodAcos, prevAcos);
   const dCtr = pct(periodCtr, prevCtr);
   const dirOf = (n: number): "up" | "down" | "flat" => (n > 0.05 ? "up" : n < -0.05 ? "down" : "flat");
   const fmtPct = (n: number) => `${Math.abs(n).toFixed(1)}%`;
