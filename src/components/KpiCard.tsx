@@ -53,7 +53,7 @@ export function KpiCard({
       </div>
       <div
         className={`mt-3 text-[30px] leading-none font-bold tracking-tight ${
-          emphasizeValue ? "text-[#1F4FE0]" : "text-ink"
+          emphasizeValue ? "text-[#5966C8]" : "text-ink"
         }`}
       >
         {value}

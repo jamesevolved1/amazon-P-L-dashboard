@@ -19,23 +19,23 @@
 }
 
 :root {
-  --ec-ink: #0f172a;
-  --ec-navy: #1e293b;
-  --ec-steel-1: #475569;
-  --ec-steel-2: #64748b;
-  --ec-steel-3: #94a3b8;
-  --ec-orange: #f47322;
-  --ec-orange-deep: #d9541f;
-  --ec-gold: #fdba31;
-  --ec-canvas: #f7f8fc;
-  --ec-soft: #eef0f8;
-  --ec-line: #e6e8f0;
-  --ec-royal: #2563eb;
-  --ec-indigo: #4f46e5;
-  --ec-lavender: #a5b4fc;
-  --ec-violet: #7c3aed;
-  --ec-emerald: #10b981;
-  --ec-sky: #0ea5e9;
+  --ec-ink: #171927;
+  --ec-navy: #25283a;
+  --ec-steel-1: #53586b;
+  --ec-steel-2: #70768a;
+  --ec-steel-3: #9ca2b3;
+  --ec-orange: #5966c8;
+  --ec-orange-deep: #414ca4;
+  --ec-gold: #c89c57;
+  --ec-canvas: #f8f9fc;
+  --ec-soft: #f0f2f8;
+  --ec-line: #e9eaf0;
+  --ec-royal: #5966c8;
+  --ec-indigo: #6764b9;
+  --ec-lavender: #95a5e8;
+  --ec-violet: #8177c8;
+  --ec-emerald: #79bba4;
+  --ec-sky: #7fa7e8;
 }
 
 * {
@@ -47,10 +47,10 @@ body {
   font-family:
     Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: #fafbfd;
+  background: #f8f9fc;
   background-image:
-    radial-gradient(1100px 520px at 8% -10%, rgba(165, 180, 252, 0.18), transparent 60%),
-    radial-gradient(900px 480px at 100% 110%, rgba(124, 58, 237, 0.10), transparent 60%);
+    radial-gradient(1000px 460px at 8% -10%, rgba(149, 165, 232, 0.13), transparent 62%),
+    radial-gradient(760px 420px at 100% 105%, rgba(121, 187, 164, 0.08), transparent 60%);
   background-attachment: fixed;
   color: var(--ec-ink);
   -webkit-font-smoothing: antialiased;
@@ -113,11 +113,12 @@ select {
 .reporting-account-header {
   border: 1px solid var(--ec-line);
   border-radius: 1rem;
-  background: linear-gradient(135deg, #ffffff 0%, #fbfcff 72%, #f5f7ff 100%);
+  background: rgba(255, 255, 255, 0.82);
   padding: 1.25rem;
   box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 18px 42px -32px rgba(79, 70, 229, 0.38);
+    0 1px 2px rgba(23, 25, 39, 0.03),
+    0 18px 42px -34px rgba(71, 78, 135, 0.24);
+  backdrop-filter: blur(14px);
 }
 
 .reporting-toolbar {
@@ -185,7 +186,7 @@ select {
   border: 1px solid var(--ec-line);
   border-radius: 1rem;
   padding: 1.25rem 1.25rem 1.1rem 1.25rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 34px -26px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 1px 2px rgba(23, 25, 39, 0.025), 0 15px 34px -28px rgba(55, 60, 92, 0.25);
   overflow: hidden;
   transition:
     border-color 160ms ease,
@@ -217,15 +218,15 @@ select {
   border-top-right-radius: 1rem;
 }
 
-.kpi-card[data-accent="brand"] { --kpi-accent: #f47322; --kpi-tile-bg: #fff1e6; --kpi-tile-fg: #c2410c; }
-.kpi-card[data-accent="lavender"] { --kpi-accent: #a5b4fc; --kpi-tile-bg: #eef0ff; --kpi-tile-fg: #4338ca; }
-.kpi-card[data-accent="indigo"] { --kpi-accent: #6366f1; --kpi-tile-bg: #eef0ff; --kpi-tile-fg: #4338ca; }
-.kpi-card[data-accent="royal"] { --kpi-accent: #2563eb; --kpi-tile-bg: #e8efff; --kpi-tile-fg: #1d4ed8; }
-.kpi-card[data-accent="sky"] { --kpi-accent: #0ea5e9; --kpi-tile-bg: #e0f2fe; --kpi-tile-fg: #0369a1; }
-.kpi-card[data-accent="emerald"] { --kpi-accent: #10b981; --kpi-tile-bg: #dcfce7; --kpi-tile-fg: #047857; }
-.kpi-card[data-accent="violet"] { --kpi-accent: #7c3aed; --kpi-tile-bg: #f1ebff; --kpi-tile-fg: #6d28d9; }
-.kpi-card[data-accent="amber"] { --kpi-accent: #f59e0b; --kpi-tile-bg: #fef3c7; --kpi-tile-fg: #b45309; }
-.kpi-card[data-accent="rose"] { --kpi-accent: #f43f5e; --kpi-tile-bg: #ffe4e6; --kpi-tile-fg: #be123c; }
+.kpi-card[data-accent="brand"] { --kpi-accent: #c89c57; --kpi-tile-bg: #faf4e9; --kpi-tile-fg: #9b743d; }
+.kpi-card[data-accent="lavender"] { --kpi-accent: #95a5e8; --kpi-tile-bg: #f0f3ff; --kpi-tile-fg: #5966c8; }
+.kpi-card[data-accent="indigo"] { --kpi-accent: #6764b9; --kpi-tile-bg: #f0effb; --kpi-tile-fg: #5652a4; }
+.kpi-card[data-accent="royal"] { --kpi-accent: #5966c8; --kpi-tile-bg: #eff1fb; --kpi-tile-fg: #414ca4; }
+.kpi-card[data-accent="sky"] { --kpi-accent: #7fa7e8; --kpi-tile-bg: #edf4fd; --kpi-tile-fg: #527dbd; }
+.kpi-card[data-accent="emerald"] { --kpi-accent: #79bba4; --kpi-tile-bg: #edf8f4; --kpi-tile-fg: #4f9079; }
+.kpi-card[data-accent="violet"] { --kpi-accent: #8177c8; --kpi-tile-bg: #f2f0fa; --kpi-tile-fg: #6860ab; }
+.kpi-card[data-accent="amber"] { --kpi-accent: #c89c57; --kpi-tile-bg: #faf4e9; --kpi-tile-fg: #9b743d; }
+.kpi-card[data-accent="rose"] { --kpi-accent: #c98888; --kpi-tile-bg: #fbf1f1; --kpi-tile-fg: #a86262; }
 .kpi-card[data-accent="slate"] { --kpi-accent: #94a3b8; --kpi-tile-bg: #f1f5f9; --kpi-tile-fg: #475569; }
 
 /* Soft icon tile color follows the accent */
@@ -276,8 +277,8 @@ select {
   letter-spacing: 0.01em;
 }
 
-.delta-chip[data-tone="good"] { background: #dcfce7; color: #15803d; }
-.delta-chip[data-tone="bad"]  { background: #fee2e2; color: #b91c1c; }
+.delta-chip[data-tone="good"] { background: #e9f7f1; color: #477f6c; }
+.delta-chip[data-tone="bad"]  { background: #faeeee; color: #a65f5f; }
 .delta-chip[data-tone="neutral"] { background: #f1f5f9; color: #475569; }
 
 /* Soft icon tile (top-right of KPI card) */

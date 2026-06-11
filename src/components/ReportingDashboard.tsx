@@ -170,7 +170,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const useDailyForTotals = dailyData.length > 0 && (periodTotals.spend > 0 || periodTotals.sales > 0);
   const T = useDailyForTotals ? periodTotals : totals;
   const periodRoas = T.spend ? T.sales / T.spend : 0;
-  const periodAcos = T.sales ? T.spend / T.sales : 0;
   const periodCtr = T.impressions ? T.clicks / T.impressions : 0;
   const periodCpc = T.clicks ? T.spend / T.clicks : 0;
   const periodCvr = T.clicks ? T.orders / T.clicks : 0;
@@ -181,10 +180,8 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const dImpressions = pct(T.impressions, prevTotals.impressions);
   const dClicks = pct(T.clicks, prevTotals.clicks);
   const prevRoas = prevTotals.spend ? prevTotals.sales / prevTotals.spend : 0;
-  const prevAcos = prevTotals.sales ? prevTotals.spend / prevTotals.sales : 0;
   const prevCtr = prevTotals.impressions ? prevTotals.clicks / prevTotals.impressions : 0;
   const dRoas = pct(periodRoas, prevRoas);
-  const dAcos = pct(periodAcos, prevAcos);
   const dCtr = pct(periodCtr, prevCtr);
   const dirOf = (n: number): "up" | "down" | "flat" => (n > 0.05 ? "up" : n < -0.05 ? "down" : "flat");
   const fmtPct = (n: number) => `${Math.abs(n).toFixed(1)}%`;
@@ -256,7 +253,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             className="h-12 w-12 shrink-0 rounded-xl shadow-chip"
             style={{
               background:
-                "linear-gradient(135deg, #C7D2FE 0%, #818CF8 60%, #6366F1 100%)",
+                "linear-gradient(135deg, #DCE6FA 0%, #A9BDEB 55%, #7F94D7 100%)",
             }}
           />
           <div className="min-w-0">
@@ -346,15 +343,12 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               helper={`${currency(salesPerDay)}/day`}
             />
             <KpiCard
-              label="ACOS"
-              value={percent(periodAcos)}
-              delta={fmtPct(dAcos)}
-              deltaDirection={dirOf(dAcos)}
-              upIsGood={false}
+              label="Account TACOS"
+              value={percent(accountTacos)}
               accent="brand"
               emphasizeValue
               icon={<Target className="h-4 w-4" />}
-              helper="ad cost / sales"
+              helper="ad spend / total sales"
             />
             <KpiCard
               label="ROAS"
@@ -390,7 +384,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             <KpiCard label="Impressions" value={number(T.impressions)} delta={fmtPct(dImpressions)} deltaDirection={dirOf(dImpressions)} accent="sky" icon={<BarChart3 className="h-4 w-4" />} />
             <KpiCard label="Clicks" value={number(T.clicks)} delta={fmtPct(dClicks)} deltaDirection={dirOf(dClicks)} accent="sky" icon={<MousePointerClick className="h-4 w-4" />} />
             <KpiCard label="Total Sales" value={currency(totalSales)} accent="emerald" icon={<CircleDollarSign className="h-4 w-4" />} helper="full account" />
-            <KpiCard label="Account TACOS" value={percent(accountTacos)} accent="amber" emphasizeValue icon={<Target className="h-4 w-4" />} helper="ad spend / total sales" />
+            <KpiCard label="Conversion Rate" value={percent(periodCvr)} accent="amber" emphasizeValue icon={<ShoppingCart className="h-4 w-4" />} helper="orders / clicks" />
             <KpiCard label="CTR" value={percent(periodCtr)} delta={fmtPct(dCtr)} deltaDirection={dirOf(dCtr)} upIsGood accent="rose" icon={<TrendingUp className="h-4 w-4" />} />
             <KpiCard label="CPC" value={currency(periodCpc)} accent="slate" icon={<Wallet className="h-4 w-4" />} helper={periodLabel.toLowerCase()} />
           </div>
@@ -444,18 +438,18 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
                 <ComposedChart data={dailyChartData} margin={{ top: 10, right: 8, left: 0, bottom: 4 }}>
                   <defs>
                     <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0F172A" stopOpacity={0.18} />
-                      <stop offset="100%" stopColor="#0F172A" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#171927" stopOpacity={0.13} />
+                      <stop offset="100%" stopColor="#171927" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F6" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={{ stroke: "#E2E8F0" }} />
-                  <YAxis yAxisId="money" tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 11, fill: "#10B981" }} tickLine={false} axisLine={false} domain={[0, "auto"]} />
-                  <Tooltip formatter={(value: number, name) => (String(name).toLowerCase().includes("cvr") ? `${value}%` : currency(value))} contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", boxShadow: "0 8px 24px -12px rgba(15,23,42,0.18)" }} />
-                  <Area yAxisId="money" type="monotone" dataKey="sales" name="Sales" stroke="#0F172A" strokeWidth={2.4} fill="url(#salesGradient)" />
-                  <Line yAxisId="money" type="monotone" dataKey="spend" name="Spend" stroke="#0EA5E9" strokeWidth={2.2} dot={false} />
-                  <Line yAxisId="rate" type="monotone" dataKey="cvr" name="CVR" stroke="#10B981" strokeWidth={2.2} dot={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ECEEF4" vertical={false} />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#9CA2B3" }} tickLine={false} axisLine={{ stroke: "#E9EAF0" }} />
+                  <YAxis yAxisId="money" tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11, fill: "#9CA2B3" }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 11, fill: "#79BBA4" }} tickLine={false} axisLine={false} domain={[0, "auto"]} />
+                  <Tooltip formatter={(value: number, name) => (String(name).toLowerCase().includes("cvr") ? `${value}%` : currency(value))} contentStyle={{ borderRadius: 12, border: "1px solid #E9EAF0", boxShadow: "0 10px 28px -16px rgba(23,25,39,0.18)" }} />
+                  <Area yAxisId="money" type="monotone" dataKey="sales" name="Sales" stroke="#171927" strokeWidth={2.4} fill="url(#salesGradient)" />
+                  <Line yAxisId="money" type="monotone" dataKey="spend" name="Spend" stroke="#7FA7E8" strokeWidth={2.2} dot={false} />
+                  <Line yAxisId="rate" type="monotone" dataKey="cvr" name="CVR" stroke="#79BBA4" strokeWidth={2.2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -530,7 +524,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         </div>
       </div> : null}
 
-      {!strategyMonths.length ? (
+      {baseAdRows.length ? (
         <CampaignsSection
           rows={baseAdRows}
           search={campaignSearch}
@@ -592,55 +586,67 @@ function CampaignsSection({
   });
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
-      <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-        <h3 className="text-lg font-extrabold text-ink">Campaigns</h3>
-        <div className="relative ml-2 flex-1 min-w-[220px] max-w-[420px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-mute" />
-          <input
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder="Search campaigns, ID, product…"
-            className="w-full rounded-full border border-line bg-canvas px-9 py-2 text-xs font-bold text-ink outline-none placeholder:text-mute focus:border-ink"
-          />
+      <div className="border-b border-line px-5 py-4">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-extrabold text-ink">Campaign reporting</h3>
+            <p className="mt-1 text-xs font-semibold text-slate">Compare spend, reach, traffic, orders, and return across every campaign.</p>
+          </div>
+          <span className="rounded-full bg-soft px-3 py-1.5 text-[11px] font-extrabold text-slate">{rows.length} synced campaigns</span>
         </div>
-        <div className="seg-control">
-          {(["all", "SP", "SB", "OTHER"] as const).map((f) => (
-            <button key={f} aria-pressed={filter === f} onClick={() => onFilter(f)}>
-              {f === "all" ? "All" : f} ({counts[f]})
-            </button>
-          ))}
-        </div>
-        <div className="relative">
-          <select
-            value={sort}
-            onChange={(e) => onSort(e.target.value as typeof sort)}
-            className="appearance-none rounded-full border border-line bg-white px-3 pr-7 py-2 text-xs font-extrabold text-ink outline-none focus:border-ink"
-          >
-            <option value="spend">Sort: Spend</option>
-            <option value="sales">Sort: Sales</option>
-            <option value="orders">Sort: Orders</option>
-            <option value="roas">Sort: ROAS</option>
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate" />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[220px] max-w-[420px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-mute" />
+            <input
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search campaigns, ID, product…"
+              className="w-full rounded-full border border-line bg-canvas px-9 py-2 text-xs font-bold text-ink outline-none placeholder:text-mute focus:border-ink"
+            />
+          </div>
+          <div className="seg-control">
+            {(["all", "SP", "SB", "OTHER"] as const).map((f) => (
+              <button key={f} aria-pressed={filter === f} onClick={() => onFilter(f)}>
+                {f === "all" ? "All" : f} ({counts[f]})
+              </button>
+            ))}
+          </div>
+          <div className="relative">
+            <select
+              value={sort}
+              onChange={(e) => onSort(e.target.value as typeof sort)}
+              className="appearance-none rounded-full border border-line bg-white px-3 pr-7 py-2 text-xs font-extrabold text-ink outline-none focus:border-ink"
+            >
+              <option value="spend">Sort: Spend</option>
+              <option value="sales">Sort: Sales</option>
+              <option value="orders">Sort: Orders</option>
+              <option value="roas">Sort: ROAS</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate" />
+          </div>
         </div>
       </div>
       <div className="overflow-auto">
-        <table className="w-full min-w-[920px] text-sm">
+        <table className="w-full min-w-[1220px] text-sm">
           <thead className="bg-canvas text-[10.5px] uppercase tracking-[0.12em] text-slate">
             <tr>
               <th className="border-b border-line px-5 py-3 text-left font-extrabold">Campaign</th>
               <th className="border-b border-line px-3 py-3 text-left font-extrabold">Type</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">Impressions</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">Clicks</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">Spend</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">Sales</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">Orders</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">ROAS</th>
-              <th className="border-b border-line px-5 py-3 text-right font-extrabold">CTR</th>
+              <th className="border-b border-line px-3 py-3 text-right font-extrabold">CTR</th>
+              <th className="border-b border-line px-5 py-3 text-right font-extrabold">CVR</th>
             </tr>
           </thead>
           <tbody>
             {sorted.slice(0, 40).map((row) => {
               const roas = row.spend ? row.sales / row.spend : 0;
               const ctr = row.impressions ? row.clicks / row.impressions : 0;
+              const cvr = row.clicks ? row.orders / row.clicks : 0;
               const t = campaignTypeCode(row.type);
               const typeBg = t === "SP" ? "bg-indigo/10 text-indigo" : t === "SB" ? "bg-emerald/10 text-emerald" : "bg-soft text-slate";
               const roasTone = roas >= 4 ? "bg-emerald/10 text-emerald" : roas >= 2.5 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
@@ -653,19 +659,22 @@ function CampaignsSection({
                   <td className="border-b border-line px-3 py-3.5">
                     <span className={`inline-flex rounded-md px-2 py-1 text-[10.5px] font-extrabold ${typeBg}`}>{t}</span>
                   </td>
+                  <td className="border-b border-line px-3 py-3.5 text-right text-slate">{number(row.impressions)}</td>
+                  <td className="border-b border-line px-3 py-3.5 text-right text-slate">{number(row.clicks)}</td>
                   <td className="border-b border-line px-3 py-3.5 text-right text-ink">{currency(row.spend)}</td>
                   <td className="border-b border-line px-3 py-3.5 text-right font-extrabold text-ink">{currency(row.sales)}</td>
                   <td className="border-b border-line px-3 py-3.5 text-right text-ink">{number(row.orders)}</td>
                   <td className="border-b border-line px-3 py-3.5 text-right">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ${roasTone}`}>{roas.toFixed(2)}x</span>
                   </td>
-                  <td className="border-b border-line px-5 py-3.5 text-right text-slate">{percent(ctr)}</td>
+                  <td className="border-b border-line px-3 py-3.5 text-right text-slate">{percent(ctr)}</td>
+                  <td className="border-b border-line px-5 py-3.5 text-right text-slate">{percent(cvr)}</td>
                 </tr>
               );
             })}
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-sm text-slate">No campaigns match the current filter.</td>
+                <td colSpan={10} className="px-5 py-10 text-center text-sm text-slate">No campaigns match the current filter.</td>
               </tr>
             ) : null}
           </tbody>
