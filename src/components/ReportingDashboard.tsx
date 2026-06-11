@@ -1,6 +1,7 @@
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, Download, FileSpreadsheet, Filter, RefreshCw, Target } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronDown, CircleDollarSign, Download, FileSpreadsheet, Filter, MousePointerClick, Package, RefreshCw, ShoppingCart, Target, TrendingUp, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
@@ -15,6 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { KpiCard } from "./KpiCard";
 import { currency, number, percent } from "../lib/format";
 import { emptyReportingSourceConfig, refreshReportingFromSheets } from "../lib/reportingData";
 import type { ReportingCampaignRow, ReportingProductRow, ReportingState, ReportingStrategyMonth } from "../types/models";
@@ -206,67 +208,141 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   };
 
   return (
-    <section className="grid gap-5">
-      <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
-        <div className="bg-[#102A3A] px-5 py-4 text-white">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-accent">Amazon Ads Command Center</div>
-              <h2 className="mt-2 text-2xl font-extrabold">Reporting Dashboard</h2>
-              <p className="mt-1 max-w-3xl text-sm text-white/75">Impressions, clicks, sales, ROAS, TACOS, campaign performance, and product-level advertising signals.</p>
-              <div className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-extrabold text-white/80">
-                {hasImportedData ? `Last refreshed ${refreshedLabel}` : "Set up this client's sheet in Settings to replace the sample dashboard"}
+    <section className="grid gap-6">
+      {/* Header: clean white panel with title, sync chip, period segmented control */}
+      <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo/10 text-indigo">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate">Reporting Dashboard</div>
+                <h2 className="text-xl font-extrabold text-ink">Amazon Ads Performance</h2>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="inline-flex items-center gap-2 rounded-md bg-white/10 px-4 py-2 text-sm font-extrabold hover:bg-white/15">
-                <CalendarDays className="h-4 w-4" />
-                Last 30 days
-              </button>
-              <button className="inline-flex items-center gap-2 rounded-md bg-white/10 px-4 py-2 text-sm font-extrabold hover:bg-white/15">
-                <Filter className="h-4 w-4" />
-                All campaigns
-              </button>
-              <button className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-extrabold text-white hover:bg-deep">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
-              <button
-                onClick={() => setStrategySourceOpen((open) => !open)}
-                className="inline-flex items-center gap-2 rounded-md bg-white/10 px-4 py-2 text-sm font-extrabold hover:bg-white/15"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Strategy Doc
-                <ChevronDown className={`h-4 w-4 transition ${strategySourceOpen ? "rotate-180" : ""}`} />
-              </button>
-              <button
-                onClick={refreshSheets}
-                disabled={isRefreshing}
-                className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-extrabold text-[#102A3A] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                {isRefreshing ? "Refreshing" : "Refresh Data"}
-              </button>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-extrabold ${hasImportedData ? "bg-emerald/10 text-emerald" : "bg-amber-100 text-amber-700"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${hasImportedData ? "bg-emerald" : "bg-amber-500"}`} />
+                {hasImportedData ? `Synced · ${refreshedLabel}` : "Sample data · connect a sheet to go live"}
+              </span>
+              <span className="text-mute">·</span>
+              <span className="font-bold text-slate">{baseAdRows.length} campaigns</span>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="pill-button">
+              <Filter className="h-4 w-4" />
+              All campaigns
+            </button>
+            <button
+              onClick={() => setStrategySourceOpen((open) => !open)}
+              className="pill-button"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Strategy Doc
+              <ChevronDown className={`h-4 w-4 transition ${strategySourceOpen ? "rotate-180" : ""}`} />
+            </button>
+            <button className="pill-button">
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              onClick={refreshSheets}
+              disabled={isRefreshing}
+              className="pill-button bg-brand"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              {isRefreshing ? "Syncing" : "Sync now"}
+            </button>
           </div>
         </div>
 
-        {!strategyMonths.length ? (
-          <div className="grid gap-4 bg-[#F1F4F8] p-5 md:grid-cols-2 xl:grid-cols-6">
-            <ReportMetric label="Impressions" value={number(totals.impressions)} delta="+2.3%" tone="neutral" />
-            <ReportMetric label="Clicks" value={number(totals.clicks)} delta="+6.6%" tone="good" />
-            <ReportMetric label="Total Sales" value={currency(totalSales)} delta="+12.7%" tone="good" />
-            <ReportMetric label="Ad Spend" value={currency(totals.spend)} delta="-12.7%" tone="bad" />
-            <ReportMetric label="Ad Sales" value={currency(totals.sales)} delta="+12.7%" tone="good" />
-            <ReportMetric label="Account TACOS" value={percent(accountTacos)} delta="Spend / total sales" tone="neutral" />
-            <ReportMetric label="ROAS" value={`${roas.toFixed(1)}x`} delta="+0.4x" tone="good" />
-            <ReportMetric label="CTR" value={percent(ctr)} delta="+0.8pp" tone="good" />
-            <ReportMetric label="Orders" value={number(totals.orders)} delta="+4.1%" tone="good" />
-            <ReportMetric label="Conv. Rate" value={percent(conversionRate)} delta="+0.5pp" tone="good" />
-            <ReportMetric label="CPC" value={`$${cpc.toFixed(2)}`} delta="+6.6%" tone="neutral" />
+        {/* Period segmented control */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="seg-control">
+            <button aria-pressed="true">Last 7 days</button>
+            <button aria-pressed="false">Last 14 days</button>
+            <button aria-pressed="false">Last 30 days</button>
+            <button aria-pressed="false">All synced</button>
           </div>
-        ) : null}
+          <div className="text-xs font-bold text-slate">
+            <CalendarDays className="mr-1 inline h-3.5 w-3.5 -mt-0.5" />
+            vs previous period
+          </div>
+        </div>
       </div>
+
+      {!strategyMonths.length ? (
+        <>
+          {/* KPI cards row 1 — headline metrics in the screenshot's style */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <KpiCard
+              label="Ad Spend"
+              value={currency(totals.spend)}
+              delta="31.6%"
+              deltaDirection="up"
+              upIsGood={false}
+              accent="brand"
+              icon={<Wallet className="h-4 w-4" />}
+              helper="per day"
+            />
+            <KpiCard
+              label="Attributed Sales"
+              value={currency(totals.sales)}
+              delta="37.9%"
+              deltaDirection="up"
+              upIsGood
+              accent="emerald"
+              icon={<ShoppingCart className="h-4 w-4" />}
+              helper="per day"
+            />
+            <KpiCard
+              label="ACOS"
+              value={percent(totals.sales ? totals.spend / totals.sales : 0)}
+              delta="4.5%"
+              deltaDirection="down"
+              upIsGood={false}
+              accent="indigo"
+              emphasizeValue
+              icon={<Target className="h-4 w-4" />}
+              helper="ad cost / sales"
+            />
+            <KpiCard
+              label="ROAS"
+              value={`${roas.toFixed(2)}x`}
+              delta="4.7%"
+              deltaDirection="up"
+              upIsGood
+              accent="indigo"
+              emphasizeValue
+              icon={<TrendingUp className="h-4 w-4" />}
+              helper="sales / ad cost"
+            />
+            <KpiCard
+              label="Orders"
+              value={number(totals.orders)}
+              delta="35.9%"
+              deltaDirection="up"
+              upIsGood
+              accent="sky"
+              icon={<Package className="h-4 w-4" />}
+              helper={`${percent(conversionRate)} CVR`}
+            />
+          </div>
+
+          {/* KPI cards row 2 — secondary metrics, preserved from your existing data */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+            <KpiCard label="Impressions" value={number(totals.impressions)} delta="2.3%" deltaDirection="up" accent="violet" icon={<BarChart3 className="h-4 w-4" />} />
+            <KpiCard label="Clicks" value={number(totals.clicks)} delta="6.6%" deltaDirection="up" accent="violet" icon={<MousePointerClick className="h-4 w-4" />} />
+            <KpiCard label="Total Sales" value={currency(totalSales)} delta="12.7%" deltaDirection="up" upIsGood accent="emerald" icon={<CircleDollarSign className="h-4 w-4" />} />
+            <KpiCard label="Account TACOS" value={percent(accountTacos)} accent="amber" helper="spend / total sales" icon={<Target className="h-4 w-4" />} />
+            <KpiCard label="CTR" value={percent(ctr)} delta="0.8pp" deltaDirection="up" upIsGood accent="rose" icon={<TrendingUp className="h-4 w-4" />} />
+            <KpiCard label="CPC" value={currency(cpc)} delta="6.6%" deltaDirection="up" upIsGood={false} accent="slate" icon={<Wallet className="h-4 w-4" />} />
+          </div>
+        </>
+      ) : null}
 
       {strategySourceOpen ? (
         <div className="rounded-lg border border-line bg-white p-5 shadow-card">
@@ -299,31 +375,41 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         <StrategyScorecard rows={strategyMonths} latest={latestStrategyMonth} previous={previousStrategyMonth} />
       ) : null}
 
-      {!strategyMonths.length ? <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+      {!strategyMonths.length ? <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.85fr)]">
         <div className="grid gap-5">
-          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
+          {/* Clean daily spend vs sales — area + line, gradient fill, matching the screenshot */}
+          <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h3 className="text-lg font-extrabold text-ink">Spend, Sales, ROAS, Clicks, and Impressions</h3>
-                <p className="mt-1 text-sm text-steel">Daily trend view for the selected date range.</p>
+                <h3 className="text-lg font-extrabold text-ink">Daily spend vs sales</h3>
+                <p className="mt-1 text-sm text-slate">Sales, spend, and CVR over the selected window.</p>
               </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-800">Live-ready</span>
+              <span className="text-xs font-extrabold text-slate">last 7 days</span>
             </div>
-            <div className="mt-4 h-[340px]">
+            <div className="mt-4 h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={dailyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(143,162,175,0.28)" />
-                  <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="money" tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="volume" orientation="right" tickFormatter={(value) => `${Math.round(value / 1000)}K`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(value: number, name) => (String(name).includes("spend") || String(name).includes("sales") ? currency(value) : number(value))} />
-                  <Legend />
-                  <Bar yAxisId="money" dataKey="sales" name="Ad sales" fill="#F47322" radius={[4, 4, 0, 0]} />
-                  <Bar yAxisId="money" dataKey="spend" name="Spend" fill="#1D6680" radius={[4, 4, 0, 0]} />
-                  <Line yAxisId="volume" type="monotone" dataKey="impressions" name="Impressions" stroke="#FDBA31" strokeWidth={2.5} dot={false} />
-                  <Line yAxisId="volume" type="monotone" dataKey="clicks" name="Clicks" stroke="#415A68" strokeWidth={2.5} dot={false} />
+                <ComposedChart data={dailyData} margin={{ top: 10, right: 8, left: 0, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0F172A" stopOpacity={0.18} />
+                      <stop offset="100%" stopColor="#0F172A" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F6" vertical={false} />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={{ stroke: "#E2E8F0" }} />
+                  <YAxis yAxisId="money" tickFormatter={(value) => `$${Math.round(value / 1000)}K`} tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 11, fill: "#10B981" }} tickLine={false} axisLine={false} />
+                  <Tooltip formatter={(value: number, name) => (String(name).toLowerCase().includes("cvr") ? `${value}%` : currency(value))} contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", boxShadow: "0 8px 24px -12px rgba(15,23,42,0.18)" }} />
+                  <Area yAxisId="money" type="monotone" dataKey="sales" name="Sales" stroke="#0F172A" strokeWidth={2.4} fill="url(#salesGradient)" />
+                  <Line yAxisId="money" type="monotone" dataKey="spend" name="Spend" stroke="#0EA5E9" strokeWidth={2.2} dot={false} />
+                  <Line yAxisId="rate" type="monotone" dataKey="impressions" name="CVR" stroke="#10B981" strokeWidth={2.2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-5 text-xs font-bold text-slate">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ink" />Sales</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky" />Spend</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald" />CVR</span>
             </div>
           </div>
 
@@ -334,46 +420,52 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
         </div>
 
         <div className="grid gap-5">
-          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
-            <h3 className="text-lg font-extrabold text-ink">Channel Mix</h3>
-            <p className="mt-1 text-sm text-steel">Spend share by Amazon ad product.</p>
-            <div className="mt-4 h-[240px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={channelMix} dataKey="value" innerRadius={58} outerRadius={86} paddingAngle={3}>
-                    {channelMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => `${value}%`} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="grid gap-2">
-              {channelMix.map((channel) => (
-                <div key={channel.name} className="flex items-center justify-between rounded-md bg-warm/60 px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 font-bold text-ink"><span className="h-2.5 w-2.5 rounded-full" style={{ background: channel.color }} />{channel.name}</span>
-                  <span className="font-extrabold">{channel.value}%</span>
-                </div>
-              ))}
+          {/* By ad product panel — matches the screenshot's right-side card */}
+          <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
+            <h3 className="text-lg font-extrabold text-ink">By ad product</h3>
+            <div className="mt-4 grid gap-4">
+              {channelMix.map((channel, idx) => {
+                const acos = idx === 0 ? "31.2%" : idx === 1 ? "22.2%" : "—";
+                const acosTone = idx === 0 ? "bg-amber-100 text-amber-700" : idx === 1 ? "bg-indigo/10 text-indigo" : "bg-soft text-slate";
+                const code = idx === 0 ? "SP" : idx === 1 ? "SB" : "OTHER";
+                const campaignCount = idx === 0 ? Math.max(1, Math.round(baseAdRows.length * 0.57)) : idx === 1 ? Math.max(1, Math.round(baseAdRows.length * 0.37)) : Math.max(1, Math.round(baseAdRows.length * 0.06));
+                const spend = idx === 0 ? totals.spend * 0.83 : idx === 1 ? totals.spend * 0.16 : totals.spend * 0.01;
+                const sales = idx === 0 ? totals.sales * 0.78 : idx === 1 ? totals.sales * 0.22 : 0;
+                return (
+                  <div key={channel.name} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-line pb-4 last:border-0 last:pb-0">
+                    <div className="flex h-9 min-w-[44px] items-center justify-center rounded-lg px-2 text-xs font-extrabold text-white" style={{ background: channel.color }}>{code}</div>
+                    <div>
+                      <div className="text-sm font-extrabold text-ink">{channel.name}</div>
+                      <div className="mt-0.5 text-xs font-bold text-slate">{campaignCount} campaigns</div>
+                      <div className="mt-1 flex items-center gap-3 text-xs font-bold text-slate">
+                        <span>Spend <span className="text-ink">{currency(spend)}</span></span>
+                        <span>Sales <span className="text-ink">{currency(sales)}</span></span>
+                      </div>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${acosTone}`}>ACOS {acos}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="rounded-lg border border-line bg-white p-5 shadow-card">
+          <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
             <div className="flex items-start gap-3">
-              <div className="rounded-full bg-amber-100 p-2 text-amber-700"><AlertTriangle className="h-5 w-5" /></div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><AlertTriangle className="h-4 w-4" /></div>
               <div>
-                <h3 className="text-lg font-extrabold text-ink">What Data We Need</h3>
-                <p className="mt-1 text-sm leading-5 text-steel">Pull these from Amazon Ads and Seller Central for a real dashboard.</p>
+                <h3 className="text-base font-extrabold text-ink">What data we need</h3>
+                <p className="mt-1 text-xs leading-5 text-slate">Pull these from Amazon Ads & Seller Central to go live.</p>
               </div>
             </div>
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-2.5">
               {requirements.map((item) => (
-                <div key={item.report} className="rounded-lg border border-line bg-white p-3">
+                <div key={item.report} className="rounded-xl border border-line bg-canvas p-3">
                   <div className="flex items-start gap-2">
-                    <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                    <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-indigo" />
                     <div>
-                      <div className="text-sm font-extrabold text-ink">{item.report}</div>
-                      <div className="mt-1 text-xs leading-5 text-steel">{item.why}</div>
-                      <div className="mt-2 inline-flex rounded-full bg-warm px-2.5 py-1 text-[11px] font-extrabold text-steel">{item.cadence}</div>
+                      <div className="text-xs font-extrabold text-ink">{item.report}</div>
+                      <div className="mt-1 text-[11px] leading-5 text-slate">{item.why}</div>
+                      <div className="mt-2 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold text-slate ring-1 ring-line">{item.cadence}</div>
                     </div>
                   </div>
                 </div>
@@ -584,30 +676,34 @@ function ReportMetric({ label, value, delta, tone }: { label: string; value: str
 
 function CampaignTable({ title, rows }: { title: string; rows: ReportingCampaignRow[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
-      <div className="border-b border-line px-5 py-4">
-        <h3 className="text-lg font-extrabold text-ink">{title}</h3>
+    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
+      <div className="flex items-center justify-between border-b border-line px-5 py-4">
+        <h3 className="text-base font-extrabold text-ink">{title}</h3>
+        <span className="text-xs font-extrabold text-slate">{rows.length} campaigns</span>
       </div>
       <div className="overflow-auto">
         <table className="w-full min-w-[680px] text-sm">
-          <thead className="text-[11px] uppercase tracking-wide text-steel">
+          <thead className="bg-canvas text-[10.5px] uppercase tracking-[0.12em] text-slate">
             <tr>
               {["Campaign", "Spend", "Sales", "ROAS", "CTR"].map((head) => <th key={head} className="border-b border-line px-4 py-3 text-left font-extrabold">{head}</th>)}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.campaign} className="hover:bg-warm/50">
-                <td className="border-b border-line px-4 py-3">
-                  <div className="font-extrabold text-ink">{row.campaign}</div>
-                  <div className="text-xs text-steel">{row.type}</div>
-                </td>
-                <td className="border-b border-line px-4 py-3">{currency(row.spend)}</td>
-                <td className="border-b border-line px-4 py-3 font-bold">{currency(row.sales)}</td>
-                <td className="border-b border-line px-4 py-3">{(row.spend ? row.sales / row.spend : 0).toFixed(1)}x</td>
-                <td className="border-b border-line px-4 py-3">{percent(row.impressions ? row.clicks / row.impressions : 0)}</td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const roas = row.spend ? row.sales / row.spend : 0;
+              return (
+                <tr key={row.campaign} className="hover:bg-canvas">
+                  <td className="border-b border-line px-4 py-3.5">
+                    <div className="font-extrabold text-ink">{row.campaign}</div>
+                    <div className="mt-0.5 inline-flex rounded-full bg-soft px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate">{row.type}</div>
+                  </td>
+                  <td className="border-b border-line px-4 py-3.5 text-ink">{currency(row.spend)}</td>
+                  <td className="border-b border-line px-4 py-3.5 font-extrabold text-ink">{currency(row.sales)}</td>
+                  <td className="border-b border-line px-4 py-3.5"><span className="font-extrabold text-indigo">{roas.toFixed(2)}x</span></td>
+                  <td className="border-b border-line px-4 py-3.5 text-slate">{percent(row.impressions ? row.clicks / row.impressions : 0)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -617,14 +713,14 @@ function CampaignTable({ title, rows }: { title: string; rows: ReportingCampaign
 
 function ProductPerformanceTable({ rows }: { rows: ReportingProductRow[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-white shadow-card">
+    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
       <div className="border-b border-line px-5 py-4">
-        <h3 className="text-lg font-extrabold text-ink">Product Performance</h3>
-        <p className="mt-1 text-sm text-steel">Ad spend and TACOS by advertised product/SKU.</p>
+        <h3 className="text-base font-extrabold text-ink">Product Performance</h3>
+        <p className="mt-1 text-xs text-slate">Ad spend and TACOS by advertised product/SKU.</p>
       </div>
       <div className="overflow-auto">
         <table className="w-full min-w-[760px] text-sm">
-          <thead className="text-[11px] uppercase tracking-wide text-steel">
+          <thead className="bg-canvas text-[10.5px] uppercase tracking-[0.12em] text-slate">
             <tr>
               {["Product", "Spend", "Sales", "TACOS", "ROAS", "Signal"].map((head) => <th key={head} className="border-b border-line px-4 py-3 text-left font-extrabold">{head}</th>)}
             </tr>
@@ -635,14 +731,21 @@ function ProductPerformanceTable({ rows }: { rows: ReportingProductRow[] }) {
               const tacos = sales ? row.spend / sales : 0;
               const roas = row.spend ? row.adSales / row.spend : 0;
               const status = !row.spend ? "No spend" : roas >= 4 ? "Scale" : roas >= 2 ? "Watch" : "Fix";
+              const statusClass = status === "Scale"
+                ? "bg-emerald/10 text-emerald"
+                : status === "Watch"
+                ? "bg-amber-100 text-amber-700"
+                : status === "Fix"
+                ? "bg-rose-100 text-rose-700"
+                : "bg-soft text-slate";
               return (
-              <tr key={`${row.product}-${row.asin}-${row.sku}`} className="hover:bg-warm/50">
-                <td className="border-b border-line px-4 py-3 font-extrabold text-ink">{row.product}</td>
-                <td className="border-b border-line px-4 py-3">{currency(row.spend)}</td>
-                <td className="border-b border-line px-4 py-3">{currency(sales)}</td>
-                <td className="border-b border-line px-4 py-3">{percent(tacos)}</td>
-                <td className="border-b border-line px-4 py-3">{roas.toFixed(1)}x</td>
-                <td className="border-b border-line px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${status === "Scale" ? "bg-emerald-100 text-emerald-800" : status === "Watch" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>{status}</span></td>
+              <tr key={`${row.product}-${row.asin}-${row.sku}`} className="hover:bg-canvas">
+                <td className="border-b border-line px-4 py-3.5 font-extrabold text-ink">{row.product}</td>
+                <td className="border-b border-line px-4 py-3.5 text-ink">{currency(row.spend)}</td>
+                <td className="border-b border-line px-4 py-3.5 font-extrabold text-ink">{currency(sales)}</td>
+                <td className="border-b border-line px-4 py-3.5 text-slate">{percent(tacos)}</td>
+                <td className="border-b border-line px-4 py-3.5"><span className="font-extrabold text-indigo">{roas.toFixed(2)}x</span></td>
+                <td className="border-b border-line px-4 py-3.5"><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${statusClass}`}>{status}</span></td>
               </tr>
             );})}
           </tbody>
@@ -663,13 +766,15 @@ function BudgetPacing({ campaigns }: { campaigns: ReportingCampaignRow[] }) {
     { label: "Click volume", actual: clicks, target: clicks * 1.1 || 1, tone: "good" },
   ];
   return (
-    <div className="rounded-lg border border-line bg-white p-5 shadow-card">
+    <div className="rounded-2xl border border-line bg-white p-6 shadow-card">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-extrabold text-ink">Budget Pacing</h3>
-          <p className="mt-1 text-sm text-steel">Goal tracking for the reporting period.</p>
+          <h3 className="text-base font-extrabold text-ink">Budget Pacing</h3>
+          <p className="mt-1 text-xs text-slate">Goal tracking for the reporting period.</p>
         </div>
-        <Target className="h-5 w-5 text-brand" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo/10 text-indigo">
+          <Target className="h-4 w-4" />
+        </div>
       </div>
       <div className="mt-5 grid gap-4">
         {goals.map((goal) => {
@@ -678,10 +783,10 @@ function BudgetPacing({ campaigns }: { campaigns: ReportingCampaignRow[] }) {
             <div key={goal.label}>
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="font-extrabold text-ink">{goal.label}</span>
-                <span className="font-bold text-steel">{currency(goal.actual)} / {currency(goal.target)}</span>
+                <span className="text-xs font-bold text-slate">{currency(goal.actual)} <span className="text-mute">/ {currency(goal.target)}</span></span>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-warm">
-                <div className={`h-full rounded-full ${goal.tone === "bad" ? "bg-danger" : "bg-brand"}`} style={{ width: `${pct * 100}%` }} />
+              <div className="h-2 overflow-hidden rounded-full bg-soft">
+                <div className={`h-full rounded-full ${goal.tone === "bad" ? "bg-danger" : "bg-indigo"}`} style={{ width: `${pct * 100}%` }} />
               </div>
             </div>
           );

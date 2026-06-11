@@ -19,17 +19,20 @@
 }
 
 :root {
-  --ec-ink: #23323b;
-  --ec-navy: #415a68;
-  --ec-steel-1: #516878;
-  --ec-steel-2: #667e8e;
-  --ec-steel-3: #8fa2af;
+  --ec-ink: #0f172a;
+  --ec-navy: #1e293b;
+  --ec-steel-1: #475569;
+  --ec-steel-2: #64748b;
+  --ec-steel-3: #94a3b8;
   --ec-orange: #f47322;
   --ec-orange-deep: #d9541f;
   --ec-gold: #fdba31;
-  --ec-cream: #f5f5f5;
-  --ec-cream-warm: #f1ebe3;
-  --ec-line: rgba(143, 162, 175, 0.25);
+  --ec-canvas: #f8fafc;
+  --ec-soft: #eef2f6;
+  --ec-line: #e2e8f0;
+  --ec-indigo: #4f46e5;
+  --ec-emerald: #10b981;
+  --ec-sky: #0ea5e9;
 }
 
 * {
@@ -41,8 +44,10 @@ body {
   font-family:
     Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: var(--ec-cream);
+  background: #ffffff;
   color: var(--ec-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -60,10 +65,10 @@ select {
   background: #ffffff;
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
-  font-weight: 800;
-  letter-spacing: 0.025em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: var(--ec-ink);
-  box-shadow: 0 1px 2px rgba(35, 50, 59, 0.06);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
@@ -73,17 +78,17 @@ select {
 
 .pill-button:hover {
   border-color: rgba(244, 115, 34, 0.45);
-  background: var(--ec-cream);
+  background: var(--ec-soft);
 }
 
 .pill-button.bg-brand {
   border-color: transparent;
-  background: #1d6680;
+  background: #0f172a;
   color: #ffffff;
 }
 
 .pill-button.bg-brand:hover {
-  background: #0f3f52;
+  background: #1e293b;
 }
 
 .pill-button:active {
@@ -91,13 +96,11 @@ select {
 }
 
 ::selection {
-  background: rgba(244, 115, 34, 0.2);
+  background: rgba(79, 70, 229, 0.18);
 }
 
 .app-shell {
-  background:
-    linear-gradient(180deg, #ffffff 0, #ffffff 126px, var(--ec-cream) 126px),
-    var(--ec-cream);
+  background: #ffffff;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -106,7 +109,7 @@ select {
 }
 
 .no-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(143, 162, 175, 0.5);
+  background: rgba(148, 163, 184, 0.5);
   border-radius: 999px;
 }
 
@@ -139,7 +142,7 @@ select {
   background-clip: padding-box;
   box-shadow:
     inset 0 -1px 0 var(--ec-line),
-    0 2px 6px rgba(35, 50, 59, 0.08);
+    0 2px 6px rgba(15, 23, 42, 0.06);
 }
 
 .pnl-table thead th::before {
@@ -148,6 +151,99 @@ select {
   inset: -2px 0 0 0;
   z-index: -1;
   background: #ffffff;
+}
+
+/* KPI card top accent stripe */
+.kpi-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid var(--ec-line);
+  border-radius: 1rem;
+  padding: 1.25rem 1.25rem 1.1rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -18px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--kpi-accent, var(--ec-indigo));
+  border-top-left-radius: 1rem;
+  border-top-right-radius: 1rem;
+}
+
+.kpi-card[data-accent="brand"] { --kpi-accent: #f47322; }
+.kpi-card[data-accent="indigo"] { --kpi-accent: #4f46e5; }
+.kpi-card[data-accent="sky"] { --kpi-accent: #0ea5e9; }
+.kpi-card[data-accent="emerald"] { --kpi-accent: #10b981; }
+.kpi-card[data-accent="violet"] { --kpi-accent: #8b5cf6; }
+.kpi-card[data-accent="amber"] { --kpi-accent: #f59e0b; }
+.kpi-card[data-accent="rose"] { --kpi-accent: #f43f5e; }
+.kpi-card[data-accent="slate"] { --kpi-accent: #64748b; }
+
+/* Segmented control (period toggle) */
+.seg-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.seg-control button {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.seg-control button:hover {
+  color: #0f172a;
+}
+
+.seg-control button[aria-pressed="true"] {
+  background: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+}
+
+/* Delta chip (up/down trend with arrow) */
+.delta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.delta-chip[data-tone="good"] { background: #dcfce7; color: #15803d; }
+.delta-chip[data-tone="bad"]  { background: #fee2e2; color: #b91c1c; }
+.delta-chip[data-tone="neutral"] { background: #f1f5f9; color: #475569; }
+
+/* Soft icon tile (top-right of KPI card) */
+.icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.65rem;
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .build-status-card {
