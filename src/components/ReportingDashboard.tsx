@@ -121,7 +121,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const [period, setPeriod] = useState<Period>("7");
   const [campaignSearch, setCampaignSearch] = useState("");
   const [campaignFilter, setCampaignFilter] = useState<"all" | "SP" | "SB" | "OTHER">("all");
-  const [campaignSort, setCampaignSort] = useState<"spend" | "sales" | "orders" | "acos" | "roas">("spend");
+  const [campaignSort, setCampaignSort] = useState<"spend" | "sales" | "orders" | "roas">("spend");
   const [strategySheetUrl, setStrategySheetUrl] = useState(state.sourceConfig.strategySheetUrl ?? "");
   const autoRefreshedStrategyUrl = useRef("");
   useEffect(() => setStrategySheetUrl(state.sourceConfig.strategySheetUrl ?? ""), [state.sourceConfig.strategySheetUrl]);
@@ -214,7 +214,6 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const useDailyForTotals = dailyData.length > 0 && (periodTotals.spend > 0 || periodTotals.sales > 0);
   const T = useDailyForTotals ? periodTotals : totals;
   const periodRoas = T.spend ? T.sales / T.spend : 0;
-  const periodAcos = T.sales ? T.spend / T.sales : 0;
   const periodCtr = T.impressions ? T.clicks / T.impressions : 0;
   const periodCpc = T.clicks ? T.spend / T.clicks : 0;
   const periodCvr = T.clicks ? T.orders / T.clicks : 0;
@@ -225,10 +224,8 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
   const dImpressions = pct(T.impressions, prevTotals.impressions);
   const dClicks = pct(T.clicks, prevTotals.clicks);
   const prevRoas = prevTotals.spend ? prevTotals.sales / prevTotals.spend : 0;
-  const prevAcos = prevTotals.sales ? prevTotals.spend / prevTotals.sales : 0;
   const prevCtr = prevTotals.impressions ? prevTotals.clicks / prevTotals.impressions : 0;
   const dRoas = pct(periodRoas, prevRoas);
-  const dAcos = pct(periodAcos, prevAcos);
   const dCtr = pct(periodCtr, prevCtr);
   const dirOf = (n: number): "up" | "down" | "flat" => (n > 0.05 ? "up" : n < -0.05 ? "down" : "flat");
   const fmtPct = (n: number) => `${Math.abs(n).toFixed(1)}%`;
@@ -372,15 +369,12 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
               helper={`${currency(salesPerDay)}/day`}
             />
             <KpiCard
-              label="ACOS"
-              value={percent(periodAcos)}
-              delta={fmtPct(dAcos)}
-              deltaDirection={dirOf(dAcos)}
-              upIsGood={false}
-              accent="indigo"
+              label="Account TACOS"
+              value={percent(accountTacos)}
+              accent="amber"
               emphasizeValue
               icon={<Target className="h-4 w-4" />}
-              helper="ad cost / sales"
+              helper="ad spend / total sales"
             />
             <KpiCard
               label="ROAS"
@@ -416,7 +410,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             <KpiCard label="Impressions" value={number(T.impressions)} delta={fmtPct(dImpressions)} deltaDirection={dirOf(dImpressions)} accent="violet" icon={<BarChart3 className="h-4 w-4" />} />
             <KpiCard label="Clicks" value={number(T.clicks)} delta={fmtPct(dClicks)} deltaDirection={dirOf(dClicks)} accent="violet" icon={<MousePointerClick className="h-4 w-4" />} />
             <KpiCard label="Total Sales" value={currency(totalSales)} accent="emerald" icon={<CircleDollarSign className="h-4 w-4" />} helper="full account" />
-            <KpiCard label="Account TACOS" value={percent(accountTacos)} accent="amber" helper="spend / total sales" icon={<Target className="h-4 w-4" />} />
+            <KpiCard label="Conversion Rate" value={percent(periodCvr)} accent="emerald" helper={`${number(T.orders)} orders`} icon={<TrendingUp className="h-4 w-4" />} />
             <KpiCard label="CTR" value={percent(periodCtr)} delta={fmtPct(dCtr)} deltaDirection={dirOf(dCtr)} upIsGood accent="rose" icon={<TrendingUp className="h-4 w-4" />} />
             <KpiCard label="CPC" value={currency(periodCpc)} accent="slate" icon={<Wallet className="h-4 w-4" />} helper={periodLabel.toLowerCase()} />
           </div>
@@ -499,12 +493,12 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
             <h3 className="text-lg font-extrabold text-ink">By ad product</h3>
             <div className="mt-4 grid gap-4">
               {channelMix.map((channel, idx) => {
-                const acos = idx === 0 ? "31.2%" : idx === 1 ? "22.2%" : "—";
-                const acosTone = idx === 0 ? "bg-amber-100 text-amber-700" : idx === 1 ? "bg-indigo/10 text-indigo" : "bg-soft text-slate";
                 const code = idx === 0 ? "SP" : idx === 1 ? "SB" : "OTHER";
                 const campaignCount = idx === 0 ? Math.max(1, Math.round(baseAdRows.length * 0.57)) : idx === 1 ? Math.max(1, Math.round(baseAdRows.length * 0.37)) : Math.max(1, Math.round(baseAdRows.length * 0.06));
                 const spend = idx === 0 ? totals.spend * 0.83 : idx === 1 ? totals.spend * 0.16 : totals.spend * 0.01;
                 const sales = idx === 0 ? totals.sales * 0.78 : idx === 1 ? totals.sales * 0.22 : 0;
+                const channelRoas = spend ? sales / spend : 0;
+                const roasTone = channelRoas >= 3 ? "bg-emerald/10 text-emerald" : channelRoas >= 1.5 ? "bg-amber-100 text-amber-700" : "bg-soft text-slate";
                 return (
                   <div key={channel.name} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-line pb-4 last:border-0 last:pb-0">
                     <div className="flex h-9 min-w-[44px] items-center justify-center rounded-lg px-2 text-xs font-extrabold text-white" style={{ background: channel.color }}>{code}</div>
@@ -516,7 +510,7 @@ export function ReportingDashboard({ state, onStateChange }: { state: ReportingS
                         <span>Sales <span className="text-ink">{currency(sales)}</span></span>
                       </div>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${acosTone}`}>ACOS {acos}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${roasTone}`}>ROAS {channelRoas.toFixed(2)}x</span>
                   </div>
                 );
               })}
@@ -587,8 +581,8 @@ function CampaignsSection({
   onSearch: (value: string) => void;
   filter: "all" | "SP" | "SB" | "OTHER";
   onFilter: (value: "all" | "SP" | "SB" | "OTHER") => void;
-  sort: "spend" | "sales" | "orders" | "acos" | "roas";
-  onSort: (value: "spend" | "sales" | "orders" | "acos" | "roas") => void;
+  sort: "spend" | "sales" | "orders" | "roas";
+  onSort: (value: "spend" | "sales" | "orders" | "roas") => void;
   topCampaigns: ReportingCampaignRow[];
   weakCampaigns: ReportingCampaignRow[];
 }) {
@@ -611,9 +605,6 @@ function CampaignsSection({
     if (sort === "spend") return b.spend - a.spend;
     if (sort === "sales") return b.sales - a.sales;
     if (sort === "orders") return b.orders - a.orders;
-    const aAcos = a.sales ? a.spend / a.sales : 999;
-    const bAcos = b.sales ? b.spend / b.sales : 999;
-    if (sort === "acos") return aAcos - bAcos;
     const aRoas = a.spend ? a.sales / a.spend : 0;
     const bRoas = b.spend ? b.sales / b.spend : 0;
     return bRoas - aRoas;
@@ -647,7 +638,6 @@ function CampaignsSection({
             <option value="spend">Sort: Spend</option>
             <option value="sales">Sort: Sales</option>
             <option value="orders">Sort: Orders</option>
-            <option value="acos">Sort: ACOS</option>
             <option value="roas">Sort: ROAS</option>
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate" />
@@ -662,19 +652,16 @@ function CampaignsSection({
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">Spend</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">Sales</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">Orders</th>
-              <th className="border-b border-line px-3 py-3 text-right font-extrabold">ACOS</th>
               <th className="border-b border-line px-3 py-3 text-right font-extrabold">ROAS</th>
               <th className="border-b border-line px-5 py-3 text-right font-extrabold">CTR</th>
             </tr>
           </thead>
           <tbody>
             {sorted.slice(0, 40).map((row) => {
-              const acos = row.sales ? row.spend / row.sales : 0;
               const roas = row.spend ? row.sales / row.spend : 0;
               const ctr = row.impressions ? row.clicks / row.impressions : 0;
               const t = typeOf(row.type);
               const typeBg = t === "SP" ? "bg-indigo/10 text-indigo" : t === "SB" ? "bg-emerald/10 text-emerald" : "bg-soft text-slate";
-              const acosTone = acos < 0.25 ? "bg-emerald/10 text-emerald" : acos < 0.4 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
               const roasTone = roas >= 4 ? "bg-emerald/10 text-emerald" : roas >= 2.5 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
               return (
                 <tr key={row.campaign} className="hover:bg-canvas">
@@ -689,9 +676,6 @@ function CampaignsSection({
                   <td className="border-b border-line px-3 py-3.5 text-right font-extrabold text-ink">{currency(row.sales)}</td>
                   <td className="border-b border-line px-3 py-3.5 text-right text-ink">{number(row.orders)}</td>
                   <td className="border-b border-line px-3 py-3.5 text-right">
-                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ${acosTone}`}>{percent(acos)}</span>
-                  </td>
-                  <td className="border-b border-line px-3 py-3.5 text-right">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ${roasTone}`}>{roas.toFixed(2)}x</span>
                   </td>
                   <td className="border-b border-line px-5 py-3.5 text-right text-slate">{percent(ctr)}</td>
@@ -700,7 +684,7 @@ function CampaignsSection({
             })}
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-10 text-center text-sm text-slate">No campaigns match the current filter.</td>
+                <td colSpan={7} className="px-5 py-10 text-center text-sm text-slate">No campaigns match the current filter.</td>
               </tr>
             ) : null}
           </tbody>
@@ -724,7 +708,7 @@ function CampaignsSection({
             {weakCampaigns.slice(0, 3).map((c) => (
               <li key={`weak-${c.campaign}`} className="flex items-center justify-between gap-3">
                 <span className="truncate font-bold">{c.campaign}</span>
-                <span className="shrink-0 font-extrabold text-rose-700">{percent(c.sales ? c.spend / c.sales : 0)}</span>
+                <span className="shrink-0 font-extrabold text-rose-700">{(c.spend ? c.sales / c.spend : 0).toFixed(2)}x ROAS</span>
               </li>
             ))}
           </ul>
